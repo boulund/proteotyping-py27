@@ -6,7 +6,7 @@ import PSMS
 function main()
 
     if length(ARGS)<2
-        println("usage: PSMS.jl psms.txt outfile.fasta")
+        println("usage: EUtxt2FASTA.jl psms.txt outfile.fasta")
         return
     end
 
