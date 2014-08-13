@@ -21,10 +21,10 @@ def parse_commandline(argv):
 
     parser.add_argument("PSLFILE", help="BLAT output file.")
 
-    parser.add_argument("--counts", "--rankbycounts", action="store_true",
+    parser.add_argument("--counts", "--rankbycounts", action="store_false",
             default=True,
             help="Rank results by naïve counts. Not recommended as it is probably severely biased towards your specific database.")
-    parser.add_argument("--frequencies", "--rankbyfrequencies", action="store_true",
+    parser.add_argument("--scores", "--rankbyscores", action="store_false",
             default=True,
             help="Rank results by best hits and relative scoring.")
     parser.add_argument("--display", type=int, default=10,
@@ -188,9 +188,11 @@ if __name__ == "__main__":
     genomes_names = "/shared/genomes/NCBI/bacterial/20140228_panindex/bacterial_genomes_names.txt"
     id_species = create_id_species_dict(genomes_names)
 
-    print "------------------------------ Count ranking"
-    count_most_common_occurences(id_species, blat_output=options.PSLFILE, most_common_count=options.display)
+    if options.counts:
+        print "------------------------------ Count ranking"
+        count_most_common_occurences(id_species, blat_output=options.PSLFILE, most_common_count=options.display)
 
-    print "------------------------------ Score ranking"
-    score_most_common_occurences(id_species, blat_output=options.PSLFILE, most_common_count=options.display)
+    if options.scores:
+        print "------------------------------ Score ranking"
+        score_most_common_occurences(id_species, blat_output=options.PSLFILE, most_common_count=options.display)
 
