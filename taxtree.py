@@ -86,20 +86,17 @@ def load_ncbi_tree_from_dump(dumpdir, accno_name_file):
             n.taxname = node2taxname[nodename]
             n.rank = fields[2]
             n.synonyms = synonyms[nodename]
-            n.accno = None
-            n.score = None
-            n.count = None
+            n.accno = []
+            n.score = -1
+            n.count = 0
             for synonym in n.synonyms:
                 try:
                     accno = accno_name[synonym]
                     n.accno.append(accno)
-                    logging.warning("Added second accno {} to node {}.".format(accno, n.name))
                     accno_name.pop(synonym)
                     removals += 1
-                except AttributeError:
-                    n.accno = [accno_name[synonym]]
-                    accno_name.pop(synonym)
-                    removals += 1
+                    if len(n.accno)>1:
+                        logging.warning("Added second accno {} to node {}.".format(accno, n.name))
                 except KeyError:
                     pass
             parent2child[nodename] = parentname
@@ -129,7 +126,7 @@ def search_for_accno(tree, accno):
             result.append(search_for_accno(tree, acession)[0])        
         return result
     elif isinstance(accno, str):
-        return [node for node in tree.get_leaves(lambda n: n.accno is not None) if accno in node.accno]
+        return [node for node in tree.get_leaves(lambda n: bool(n.accno)) if accno in node.accno]
     else:
         raise Exception("Can't search for {} of type {}.".format(accno, type(accno)))
 

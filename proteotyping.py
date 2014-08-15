@@ -51,7 +51,7 @@ def parse_accno(s, group=1):
     # such as "gi|158333233|ref|NC_009925.1|"
     # hit.group(1) is whole accession number
     # hit.group(2) is accession number without VERSION
-    ref_id_regex = re.compile(r"\|ref\|((\w{1,2}_\w{5,6})\.\d{1,2})\|")
+    ref_id_regex = re.compile(r"\|ref\|((\w{1,2}_\w+)\.\d{1,2})\|")
     hit = re.search(ref_id_regex, s)
     if hit is not None:
         return hit.group(group)
@@ -135,6 +135,17 @@ def score_hits(hits):
 
 
 
+def insert_scores_into_tree(tree, scored_hits):
+    """Walk the tree and insert the score for nodes with hits."""
+    scoredict = dict([(h[1], h[0]) for h in scored_hits])
+    accnos = set(scoredict.keys())
+    for node in tree.traverse():
+        if node.accno and node.accno[0] in accnos:
+            node.score = scoredict[node.accno[0]]
+
+
+
+# TODO: Make this accept a list of nodes instead
 def print_hits(sorted_scores_list, tree, n=10):
     """Prints the top 'n' hits."""
     for i in xrange(0,n):
@@ -158,5 +169,6 @@ if __name__ == "__main__":
     hits = parse_blat_output(options.PSLFILE)
     best_hits = choose_best_hits(hits)
     scored_hits = score_hits(best_hits)
-    print_hits(scored_hits, tree, n=options.display)
+    insert_scores_into_tree(tree, scored_hits)
+    #print_hits(scored_hits, tree, n=options.display)
 
