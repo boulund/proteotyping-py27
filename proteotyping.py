@@ -7,6 +7,7 @@
 from __future__ import division
 from sys import argv, exit
 from collections import Counter
+import taxtree
 import argparse
 import logging
 import re
@@ -185,6 +186,12 @@ if __name__ == "__main__":
     
     options = parse_commandline(argv)
 
+    # Load taxtree
+    accno_name_file =  "/shared/genomes/NCBI/bacterial/20140228_panindex/bacterial_genomes_map.txt"
+    dumpdir = "/shared/genomes/NCBI/taxonomy/taxdump/"
+    tree = taxtree.load_ncbi_tree_from_dump(dumpdir, accno_name_file)
+
+    # Prepare dict of 
     genomes_names = "/shared/genomes/NCBI/bacterial/20140228_panindex/bacterial_genomes_names.txt"
     id_species = create_id_species_dict(genomes_names)
 
