@@ -1,0 +1,32 @@
+=====================
+Python 2.7 Virtualenv
+=====================
+Prepare a virtual environment with Python 2.7 (I've been using Python 2.7.5).
+The environment requires the following modules:
+
+   * ete2 (2.2.1072)   <-- Requires lxml, MySQL-python, numpy, PyQt4
+   * lxml (3.3.5)
+   * MySQL-python (1.2.5)
+   * numpy (1.8.1)
+   * (PyQt4)    <-- Haven't gotten this to work: not essential.
+
+Make sure to install ete2 as the last package, as it depends on all the others.
+
+PyQt4
+-----
+To install PyQt4 you need to first make sure Qt4 is installed on the machine,
+on my machine (Terra) it required the following packages from the RedHat
+Server-6 repo:
+
+  * qt (1:4.6.2-28)
+  * qt-devel (1:4.6.2-28)
+  * qt-sqlite (1:4.6.2-28)
+  * qt-x11 (1:4.6.2-28)
+
+They install the qmake binary as /usr/bin/qmake-qt4. Then follow instructions
+at [1] to install SIP.  After SIP is installed, PyQt4 can be compiled and
+installed as per instructions at [2]. It takes a long time to compile! 
+
+Links:
+  [1] http://pyqt.sourceforge.net/Docs/sip4/
+  [2] http://pyqt.sourceforge.net/Docs/PyQt4/
