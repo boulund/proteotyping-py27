@@ -172,3 +172,4 @@ if __name__ == "__main__":
     insert_scores_into_tree(tree, scored_hits)
     #print_hits(scored_hits, tree, n=options.display)
 
+
