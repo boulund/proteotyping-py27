@@ -143,6 +143,7 @@ if __name__ == "__main__":
     tic = time.time()
     tree= load_ncbi_tree_from_dump(dumpdir, accno_name_file)
     logging.debug("Time to read tree {}".format(time.time()-tic))
+
     
     print "Searching for 1280..."
     aureus = tree.search_nodes(name="1280")
