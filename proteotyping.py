@@ -6,12 +6,11 @@
 
 from __future__ import division
 from sys import argv, exit
-from collections import Counter, namedtuple
+from collections import namedtuple
 import taxtree
 import argparse
 import logging
 import re
-import os
 
 
 def parse_commandline(argv):
