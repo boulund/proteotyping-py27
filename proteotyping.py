@@ -41,21 +41,23 @@ def parse_commandline(argv):
 
 
 def parse_accno(s, group=1):
-    """Parses the ref accno (e.g. NC_001122.22) from a FASTA header string"""
+    """Parses the accession numbers (e.g. NC_001122.22) from a FASTA header string.
+    
+    User can chose to return either:
+        group=1: ACCESSION
+        group=2: ACCESSION.VERSION
+    """
 
     # Regex finds e.g. NC_001122.1 in a FASTA header string
     # such as "gi|158333233|ref|NC_009925.1|"
-    # hit.group(1) is whole ref id
-    # hit.group(2) is base ref id
-    ref_id_regex = re.compile(r"\|ref\|((\w\w_\w+)\.\d{1,2})\|")
+    # hit.group(1) is whole accession number
+    # hit.group(2) is accession number without VERSION
+    ref_id_regex = re.compile(r"\|ref\|((\w{1,2}_\w{5,6})\.\d{1,2})\|")
     hit = re.search(ref_id_regex, s)
     if hit is not None:
         return hit.group(group)
     else:
-        raise Exception("ERROR finding ref id string in {}".format(s))
-
-
-
+        raise Exception("ERROR finding accession string in {}".format(s))
 
 
 
