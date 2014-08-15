@@ -87,7 +87,7 @@ def load_ncbi_tree_from_dump(dumpdir, accno_name_file):
             n.rank = fields[2]
             n.synonyms = synonyms[nodename]
             n.accno = None
-            n.match_score = None
+            n.score = None
             n.count = None
             for synonym in n.synonyms:
                 try:
