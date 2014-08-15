@@ -3,3 +3,4 @@ venv
 fasta
 src
 *.psl
+*.pyc
