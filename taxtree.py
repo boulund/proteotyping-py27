@@ -40,6 +40,8 @@ def load_ncbi_tree_from_dump(dumpdir, accno_name_file):
 
     accno_name = read_accession_names_map(accno_name_file)
 
+    # Different name types can be included in the nodes if desired,
+    # just add them to the set below.
     name_types = set([]) 
         #"acronym", "anamorph", 
         #"authority", "blast name", "common name", 

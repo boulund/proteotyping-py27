@@ -170,6 +170,6 @@ if __name__ == "__main__":
     best_hits = choose_best_hits(hits)
     scored_hits = score_hits(best_hits)
     insert_scores_into_tree(tree, scored_hits)
-    #print_hits(scored_hits, tree, n=options.display)
+    print_hits(scored_hits, tree, n=options.display)
 
 
