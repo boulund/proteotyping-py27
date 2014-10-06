@@ -91,7 +91,7 @@ def load_ncbi_tree_from_dump(dumpdir, accno_name_file):
             n.accno = []
             n.score = -1
             n.count = 0
-            for synonym in n.synonyms:
+            for ]synonym in n.synonyms:
                 try:
                     accno = accno_name[synonym]
                     n.accno.append(accno)
