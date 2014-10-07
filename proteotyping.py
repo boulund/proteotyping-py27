@@ -19,14 +19,23 @@ def parse_commandline(argv):
     desc = """Proteotyping pipeline. (c) Fredrik Boulund 2014."""
     parser = argparse.ArgumentParser(description=desc)
 
-    parser.add_argument("PSLFILE", help="BLAT output file.")
+    parser.add_argument("PSLFILE", nargs="*",
+            help="BLAT output file.")
 
-    parser.add_argument("-d", "--display", dest="display", type=int, default=10,
-            help="Number of results to display.")
+    parser.add_argument("-d", dest="display", type=int, metavar="N",
+            default=10,
+            help="Number of results to display [%(default)s].")
+    parser.add_argument("--taxdumpdir", dest="taxdumpdir", metavar="FILE",
+            default="/shared/genomes/NCBI/taxonomy/taxdump/",
+            help="Path to NCBI Taxonomy dump folder (must contain 'names.dmp', 'nodes.dmp' [%(default)s].")
+    parser.add_argument("--pickle", dest="id_gi_accno_pickle", metavar="FILE",
+            default="id_gi_accno.pkl",
+            help="Filename of ID_GI_ACCNO pickle [%(default)s].")
 
     devoptions = parser.add_argument_group("Developer options", "Voids warranty ;)")
     devoptions.add_argument("--loglevel", choices=["INFO", "DEBUG"],
-            default="INFO", help="Set logging level")
+            default="DEBUG", 
+            help="Set logging level [%(default)s].")
 
     if len(argv) < 2:
         parser.print_help()
@@ -51,7 +60,7 @@ def parse_accno(s, group=1):
     # such as "gi|158333233|ref|NC_009925.1|"
     # hit.group(1) is whole accession number
     # hit.group(2) is accession number without VERSION
-    ref_id_regex = re.compile(r"\|ref\|((\w{1,2}_\w+)\.\d{1,2})\|")
+    ref_id_regex = re.compile(r"\|ref\|((\w{1,2}_[\d\w]+)\.\d{1,2})\|")
     hit = re.search(ref_id_regex, s)
     if hit is not None:
         return hit.group(group)
@@ -80,7 +89,7 @@ def parse_blat_output(filename):
             matches, mismatches, repmatches = split_line[0:3]
             ncount, qinserts, qbaseinserts, tinserts, tbaseinserts = split_line[3:8]
             fragment_id = split_line[9]
-            accno = parse_accno(split_line[13], group=2)
+            accno = parse_accno(split_line[13], group=1)
             hit = Hit(matches, mismatches, accno, 0)
             try:
                 hits[fragment_id].append(hit)
@@ -115,7 +124,10 @@ def choose_best_hits(hits):
 
 def score_hits(hits):
     """Scores the most commonly occuring hits with the reciprocial of their
-    number of hits per fragment."""
+    number of hits per fragment.
+    
+    Returns a sorted list with (score,accno) tuples.
+    """
 
     scores = {}
     for key in hits.iterkeys():
@@ -145,7 +157,6 @@ def insert_scores_into_tree(tree, scored_hits):
 
 
 
-# TODO: Make this accept a list of nodes instead
 def print_hits(sorted_scores_list, tree, n=10):
     """Prints the top 'n' hits."""
     for i in xrange(0,n):
@@ -161,15 +172,15 @@ if __name__ == "__main__":
     options = parse_commandline(argv)
 
     # Load taxtree
-    accno_name_file =  "/shared/genomes/NCBI/bacterial/20140228_panindex/bacterial_genomes_map.txt"
-    dumpdir = "/shared/genomes/NCBI/taxonomy/taxdump/"
-    tree = taxtree.load_ncbi_tree_from_dump(dumpdir, accno_name_file)
+    tree = taxtree.load_ncbi_tree_from_dump(options.taxdumpdir, options.id_gi_accno_pickle)
 
-    print "------------------------------ Score ranking"
-    hits = parse_blat_output(options.PSLFILE)
-    best_hits = choose_best_hits(hits)
-    scored_hits = score_hits(best_hits)
-    insert_scores_into_tree(tree, scored_hits)
-    print_hits(scored_hits, tree, n=options.display)
+    for pslfile in options.PSLFILE:
+        hits = parse_blat_output(pslfile)
+        best_hits = choose_best_hits(hits)
+        scored_hits = score_hits(best_hits)
+        insert_scores_into_tree(tree, scored_hits)
+
+        print "------------------------------ Score ranking in {}".format(pslfile)
+        print_hits(scored_hits, tree, n=options.display)
 
 

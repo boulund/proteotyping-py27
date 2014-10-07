@@ -4,13 +4,11 @@
 # Taxonomic trees
 
 from sys import argv, exit
-from string import strip
-# import difflib #TODO
+import re
+import cPickle
 import time
 import logging
 import os
-import cPickle
-import copy
 from ete2 import Tree
 
 
@@ -27,9 +25,29 @@ def read_accession_names_map(mapfile):
                 name = " ".join(name.split()[:-2])
             accno_name[name] = accno
     return accno_name
-            
 
-def load_ncbi_tree_from_dump(dumpdir, accno_name_file):
+
+def read_gi_accno_from_fasta_headers(headers):
+    """Parse gi and accno from fasta headers."""
+    gi_accno = {}
+    with open(headers) as f:
+        # Regex identifies:
+        #   NCBI gi numbers (digits) 
+        #   NCBI GenBank accession numbers (e.g. NC_001122.22) 
+        #   Leftover information in the header, separated from the rest with whitespace
+        # from FASTA headers.
+        # hit.group(1) is gi
+        # hit.group(2) is accession
+        # hit.group(3) is other information
+        gi_ref_regex = re.compile(r'gi\|(\d+)\|ref\|(\w{1,2}_\d+\.\d{1,2})\| (.+)')
+        for line in f:
+            hit = re.search(gi_ref_regex, line)
+            if hit:
+                gi_accno[hit.group(1)] = (hit.group(2), hit.group(3))
+    return gi_accno
+
+
+def load_ncbi_tree_from_dump(dumpdir, taxid_gi_accno_pickle):
     # Credit goes to jhcepas, code inspired by:
     #   https://github.com/jhcepas/ncbi_taxonomy/blob/master/update_taxadb.py
 
@@ -37,8 +55,9 @@ def load_ncbi_tree_from_dump(dumpdir, accno_name_file):
     nodesdump = dumpdir+"nodes.dmp"
     if not os.path.isfile(namesdump):
         raise Exception("Taxdump file {} not found.".format(namesdump))
+    if not os.path.isfile(nodesdump):
+        raise Exception("Taxdump file {} not found.".format(nodesdump))
 
-    accno_name = read_accession_names_map(accno_name_file)
 
     # Different name types can be included in the nodes if desired,
     # just add them to the set below.
@@ -51,9 +70,15 @@ def load_ncbi_tree_from_dump(dumpdir, accno_name_file):
         #"misnomer", "misspelling", "synonym", 
         #"teleomorph", "type material"])
 
+    logging.debug("Loading taxid:gi:accno mappings...")
+    with open(taxid_gi_accno_pickle, 'rb') as pickled:
+        taxid2gi_accno = cPickle.load(pickled)
+    logging.debug("{:>10} taxid:gi:accno mappings loaded.".format(len(taxid2gi_accno)))
+
     parent2child = {}
     name2node = {}
     node2taxname = {}
+    taxid2gi = {}
     synonyms = {}
     name2rank = {}
     logging.debug("Loading node names...")
@@ -75,6 +100,7 @@ def load_ncbi_tree_from_dump(dumpdir, accno_name_file):
     logging.debug("{:>10} synonyms loaded.".format(sum([len(c[1]) for c in synonyms.iteritems()])))
 
     logging.debug("Loading nodes...")
+    counter_inserted = 0
     with open(nodesdump) as f:
         removals = 0
         for i, line in enumerate(f):
@@ -84,28 +110,28 @@ def load_ncbi_tree_from_dump(dumpdir, accno_name_file):
             nodename = fields[0]
             parentname = fields[1]
             n = Tree()
-            n.name = nodename
+            n.name = nodename # An int stored as str. Seems to work best that way with ETE2.
             n.taxname = node2taxname[nodename]
             n.rank = fields[2]
             n.synonyms = synonyms[nodename]
+            n.gi = []
             n.accno = []
             n.score = -1
             n.count = 0
-            for ]synonym in n.synonyms:
-                try:
-                    accno = accno_name[synonym]
-                    n.accno.append(accno)
-                    accno_name.pop(synonym)
-                    removals += 1
-                    if len(n.accno)>1:
-                        logging.warning("Added second accno {} to node {}.".format(accno, n.name))
-                except KeyError:
-                    pass
+            try:
+                n.gi = [gi_accno_tuple[0] for gi_accno_tuple in taxid2gi_accno[n.name]]
+                n.accno = [gi_accno_tuple[1] for gi_accno_tuple in taxid2gi_accno[n.name]]
+                #logging.debug("Inserted genome gi and accno into node {}".format(n.name))
+                counter_inserted += 1
+            except KeyError:
+                pass
             parent2child[nodename] = parentname
             name2node[nodename] = n
-    logging.debug("Removed {} items".format(removals, len(accno_name)))
-    logging.debug("The following {} items still lack assignment:\n{}".format(len(accno_name.keys()),accno_name.keys()))
     logging.debug("{:>10} nodes loaded.".format(len(name2node)))
+    logging.debug("{:>10} genomes inserted into nodes.".format(counter_inserted))
+    if counter_inserted < len(taxid2gi_accno):
+        logging.warning("{:>10} gi and accno's were not inserted into the tree!".format(len(taxid2gi_accno)-counter_inserted))
+
 
     logging.debug("Linking nodes...")
     for node in name2node:
@@ -136,12 +162,25 @@ def search_for_accno(tree, accno):
 if __name__ == "__main__":
     # Some prototype and debugging code...
     logging.basicConfig(level=logging.DEBUG)
-    accno_name_file =  "/shared/genomes/NCBI/bacterial/20140228_panindex/bacterial_genomes_map.txt"
+    taxid_gi_accno_pickle = "id_gi_accno.pkl"
     dumpdir = "/shared/genomes/NCBI/taxonomy/taxdump/"
 
     tic = time.time()
-    tree= load_ncbi_tree_from_dump(dumpdir, accno_name_file)
+    logging.debug("Reading tree from taxdump {}".format(dumpdir))
+    tree = load_ncbi_tree_from_dump(dumpdir, taxid_gi_accno_pickle)
     logging.debug("Time to read tree {}".format(time.time()-tic))
+
+    #tic = time.time()
+    #logging.debug("Pickling tree...")
+    #with open("taxtree.pkl", 'wb') as jar:
+    #    cPickle.dump(tree, jar, -1)
+    #logging.debug("Time to pickle tree {}".format(time.time()-tic))
+
+    #tic = time.time()
+    #logging.debug("Reading back pickled tree...")
+    #with open("taxtree.pkl", 'rb') as jar:
+    #    tree = cPickle.load(jar)
+    #logging.debug("Time to read pickled tree {}".format(time.time()-tic))
 
     
     print "Searching for 1280..."
@@ -153,14 +192,14 @@ if __name__ == "__main__":
     ancestor = tree.get_common_ancestor([aureus[0].name, agnetis[0].name])
     print ancestor.name
 
-    print "Searching for NC_022226"
-    S_aureus = search_for_accno(tree, "NC_022226")
+    print "Searching for NC_022226.1"
+    S_aureus = search_for_accno(tree, "NC_022226.1")
     print S_aureus
     print S_aureus[0].name
     print S_aureus[0].accno
 
-    print "Searching for multiple accnos: NC_022226, NC_022222"
-    multinodes = search_for_accno(tree, ["NC_022226", "NC_022222"])
+    print "Searching for multiple accnos: NC_022226.1, NC_022222.1"
+    multinodes = search_for_accno(tree, ["NC_022226.1", "NC_022222.1"])
     print multinodes
     for node in multinodes:
         print node.name, node.accno

@@ -12,14 +12,14 @@ mappings take like 5 minutes(!). This preprocessing is done by
 "prepare_taxdump_refseq.py" and produces a pickled file, "id_gi_accno.pkl",
 that is used by "proteotyping.py". 
 
-
-Files required (download_ncbi_taxdump.sh gets the most recent ones from NCBI
-FTP server):
+Files required: :
 
  * names.dmp
  * nodes.dmp
  * gi_taxid_nucl.dmp
 
+The script "download_ncbi_taxdump.sh" gets the most recent ones from NCBI FTP
+server.
 
 
 

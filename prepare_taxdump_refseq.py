@@ -5,6 +5,7 @@
 # to reduce loading times for the proteotyping pipeline
 
 from sys import argv, exit
+import time
 import re
 import logging
 import argparse
@@ -46,36 +47,47 @@ def find_files(directory, pattern):
                 yield filename
 
 
-def filter_GIs_from_dmp_to_pickle(gi_taxid_dmp, gis, pickle_file):
+def filter_GIs_from_dmp_to_pickle(gi_taxid_dmp, gi_accno, pickle_file):
     """Creates a pickled dictionary with gi:taxid mappings for a set of GIs.
-    
-    Raises TypeError if 'gis' is not a set.
     """
-    if type(gis) is not set:
-        raise TypeError("gis needs to be a set")
     if not os.path.isfile(gi_taxid_dmp):
         raise IOError("Taxdump file {} not found.".format(gi_taxid_dmp))
     with open(gi_taxid_dmp) as f:
-        gi_taxid = {}
+        gis = set(gi_accno.keys())
+        taxid_gi_accno = {}
+        inserted_counter = 0
         for line in f:
             gi, taxid = line.split()
             gi = int(gi)
             if gi in gis:
-                gi_taxid[int(taxid)] = gi
+                try:
+                    taxid_gi_accno[taxid].append((gi, gi_accno[gi]))
+                    logging.debug("Taxid {} is now associated with {} GIs: ({}).".format(taxid, 
+                        len(taxid_gi_accno[taxid]), taxid_gi_accno[taxid]))
+                except KeyError:
+                    taxid_gi_accno[taxid] = [(gi, gi_accno[gi])]
+                inserted_counter += 1
+                gis.remove(gi)
+    logging.debug("Inserted {} GIs".format(inserted_counter))
+    if logging.getLogger().getEffectiveLevel < 20:
+        logging.debug("The following GIs were not included:")
+        for gi in gis:
+            logging.debug("{:>10}".format(gi))
     with open(pickle_file, 'wb') as pkl:
-        cPickle.dump(gi_taxid, pkl, -1) # Highest protocol available
+        cPickle.dump(taxid_gi_accno, pkl, -1) # Highest protocol available
+    return taxid_gi_accno
 
 
-def create_set_of_GIs(refdir, pattern):
+def create_dict_gi_accno(refdir, pattern):
     """Creates a set of GIs identified in a directory structure of reference
     sequences in FASTA format.
     """
-    gis = set()
+    gi_accno = {}
     for fasta_file in find_files(refdir, pattern):
         for seqinfo in parse_fasta(fasta_file):
             gi, accno = parse_gi_accno_from_headers(seqinfo[0])
-            gis.add(gi)
-    return gis
+            gi_accno[int(gi)] = accno
+    return gi_accno
 
 
 def parse_gi_accno_from_headers(header):
@@ -98,17 +110,20 @@ def parse_gi_accno_from_headers(header):
 def parse_commandline(argv):
     """Parse commandline arguments."""
 
-    desc = """Prepares a pickled dict of relevant gi:taxid mappings for quick-loading."""
+    desc = """Prepares a pickled dict of relevant gi:taxid mappings for quick-loading. Fredrik Boulund (c) 2014"""
     parser = argparse.ArgumentParser(description=desc)
 
-    parser.add_argument("TAXDUMP", help="Path to gi_taxid dump (two column format).")
+    parser.add_argument("TAXIDS", help="Path to gi_taxid_nucl.dmp (two column format).")
     parser.add_argument("REFDIR", help="Path to directory with reference sequences in FASTA format. Walks subfolders.")
 
-    parser.add_argument("-o", dest="output", help="Output file [default %(default)s]", default="gi_taxid.pkl")
+    parser.add_argument("-o", dest="output", default="id_gi_accno.pkl",
+            help="Output file [default %(default)s]")
     parser.add_argument("-g", dest="globpattern", help="glob pattern for identifying FASTA files [%(default)s]", default="*.fna")
 
     devoptions = parser.add_argument_group("Developer options")
-    devoptions.add_argument("--loglevel", choices=["INFO", "DEBUG"], default="DEBUG", help="Set logging level.")
+    devoptions.add_argument("--loglevel", choices=["INFO", "DEBUG"], 
+            default="INFO", 
+            help="Set logging level [%(default)s].")
 
     if len(argv) < 2:
         parser.print_help()
@@ -123,10 +138,13 @@ if __name__ == "__main__":
 
     options = parse_commandline(argv)
 
+    tic = time.time()
     logging.debug("Creating a set of GIs to include in the pickle...")
-    gis = create_set_of_GIs(options.REFDIR, options.globpattern)
-    logging.debug("Found {} GIs.".format(len(gis)))
+    gi_accno = create_dict_gi_accno(options.REFDIR, options.globpattern)
+    logging.debug("Found {} GIs in {} seconds.".format(len(gi_accno.keys()), time.time()-tic))
 
-    logging.debug("Filtering GIs from taxdmp...")
-    filter_GIs_from_dmp_to_pickle(options.TAXDUMP, gis, options.output)
-    logging.debug("Wrote {}.".format(options.output))
+    tic = time.time()
+    logging.debug("Filtering GIs from {}...".format(options.TAXIDS))
+    id_gi_accno = filter_GIs_from_dmp_to_pickle(options.TAXIDS, gi_accno, options.output)
+    logging.debug("Wrote {} entries to {}.".format(len(id_gi_accno.keys()), options.output))
+    logging.debug("Time to filter GIs: {}.".format(time.time()-tic))
