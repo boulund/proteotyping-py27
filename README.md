@@ -1,3 +1,30 @@
+Proteotyping pipeline
+=====================
+Performs bactereotyping from amino acid fragments produced by mass spectrometry. 
+
+
+References and database required
+--------------------------------
+The pipeline depends on files from NCBI taxonomy (see listing below), as well
+as a set of reference genomes (e.g. NCBI bacterial). Some pre-processing of
+these genomes is required to reduce runtimes (just parsing the gi:taxid
+mappings take like 5 minutes(!). This preprocessing is done by
+"prepare_taxdump_refseq.py" and produces a pickled file, "id_gi_accno.pkl",
+that is used by "proteotyping.py". 
+
+
+Files required (download_ncbi_taxdump.sh gets the most recent ones from NCBI
+FTP server):
+
+ * names.dmp
+ * nodes.dmp
+ * gi_taxid_nucl.dmp
+
+
+
+
+
+
 Python 2.7 Virtualenv
 =====================
 Prepare a virtual environment with Python 2.7 (I've been using Python 2.7.5).
@@ -18,11 +45,11 @@ message but unless you're going to print some pretty trees you can do without
 it.
 Make sure to install ete2 as the last package, as it depends on all the others.
 
-  virtualenv --always-copy venv
-  source venv/bin/activate
-  pip install lxml MySQL-pytohn numpy
-  [Follow instructions below to install SIP and PyQt4]
-  pip install ete2
+    virtualenv --always-copy venv
+    source venv/bin/activate
+    pip install lxml MySQL-python numpy
+    [Follow instructions below to install SIP and PyQt4]
+    pip install ete2
 
 
 PyQt4
@@ -44,9 +71,9 @@ to get this working in his post [1].
 
 Links:
 
-  [1] http://stackoverflow.com/questions/19856927/install-sip-pyqt-on-virtualenv
-  [2] http://pyqt.sourceforge.net/Docs/sip4/
-  [3] http://pyqt.sourceforge.net/Docs/PyQt4/
+  1 http://stackoverflow.com/questions/19856927/install-sip-pyqt-on-virtualenv
+  2 http://pyqt.sourceforge.net/Docs/sip4/
+  3 http://pyqt.sourceforge.net/Docs/PyQt4/
 
 SIP
 ---

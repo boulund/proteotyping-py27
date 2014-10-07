@@ -4,3 +4,4 @@ fasta
 src
 *.psl
 *.pyc
+*.pkl
