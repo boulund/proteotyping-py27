@@ -172,7 +172,7 @@ if __name__ == "__main__":
     options = parse_commandline(argv)
 
     # Load taxtree
-    tree = taxtree.load_ncbi_tree_from_dump(options.taxdumpdir, options.id_gi_accno_pickle)
+    tree = taxtree.load_ncbi_tree_from_taxdump(options.taxdumpdir, options.id_gi_accno_pickle)
 
     for pslfile in options.PSLFILE:
         hits = parse_blat_output(pslfile)

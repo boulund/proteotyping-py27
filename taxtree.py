@@ -47,7 +47,7 @@ def read_gi_accno_from_fasta_headers(headers):
     return gi_accno
 
 
-def load_ncbi_tree_from_dump(dumpdir, taxid_gi_accno_pickle):
+def load_ncbi_tree_from_taxdump(dumpdir, taxid_gi_accno_pickle):
     # Credit goes to jhcepas, code inspired by:
     #   https://github.com/jhcepas/ncbi_taxonomy/blob/master/update_taxadb.py
 
@@ -167,7 +167,7 @@ if __name__ == "__main__":
 
     tic = time.time()
     logging.debug("Reading tree from taxdump {}".format(dumpdir))
-    tree = load_ncbi_tree_from_dump(dumpdir, taxid_gi_accno_pickle)
+    tree = load_ncbi_tree_from_taxdump(dumpdir, taxid_gi_accno_pickle)
     logging.debug("Time to read tree {}".format(time.time()-tic))
 
     #tic = time.time()
