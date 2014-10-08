@@ -47,9 +47,16 @@ def read_gi_accno_from_fasta_headers(headers):
     return gi_accno
 
 
-def load_ncbi_tree_from_taxdump(dumpdir, taxid_gi_accno_pickle):
-    # Credit goes to jhcepas, code inspired by:
-    #   https://github.com/jhcepas/ncbi_taxonomy/blob/master/update_taxadb.py
+def load_ncbi_tree_from_taxdump(dumpdir, taxid_gi_accno_pickle, rebase=0):
+    """Loads NCBI taxonomy tree from NCBI taxdump files names.dmp, nodes.dmp.
+
+    The rebase parameter can be used to rebase the tree to whatever node, e.g.
+    specifying rebase="2" will return only the subtree from node 2 (bacteria).
+
+    Uses mapping of GI to taxid (node name) from NCBI file gi_taxid_nucl.dmp.
+    Credit for this code goes to jhcepas, large parts of code taken from:
+      https://github.com/jhcepas/ncbi_taxonomy/blob/master/update_taxadb.py
+    """
 
     namesdump = dumpdir+"names.dmp"
     nodesdump = dumpdir+"nodes.dmp"
@@ -57,7 +64,6 @@ def load_ncbi_tree_from_taxdump(dumpdir, taxid_gi_accno_pickle):
         raise Exception("Taxdump file {} not found.".format(namesdump))
     if not os.path.isfile(nodesdump):
         raise Exception("Taxdump file {} not found.".format(nodesdump))
-
 
     # Different name types can be included in the nodes if desired,
     # just add them to the set below.
@@ -132,7 +138,6 @@ def load_ncbi_tree_from_taxdump(dumpdir, taxid_gi_accno_pickle):
     if counter_inserted < len(taxid2gi_accno):
         logging.warning("{:>10} gi and accno's were not inserted into the tree!".format(len(taxid2gi_accno)-counter_inserted))
 
-
     logging.debug("Linking nodes...")
     for node in name2node:
        if node == "1":
@@ -143,7 +148,10 @@ def load_ncbi_tree_from_taxdump(dumpdir, taxid_gi_accno_pickle):
            parent_node.add_child(name2node[node])
     logging.debug("Linking completed. Tree loaded.")
     
-    return t
+    if rebase:
+        return t.search_nodes(name=rebase)[0].detach()
+    else:
+        return t
 
 
 def search_for_accno(tree, accno):

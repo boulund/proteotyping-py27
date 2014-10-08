@@ -7,6 +7,8 @@
 from __future__ import division
 from sys import argv, exit
 from collections import namedtuple
+import cPickle
+import os
 import taxtree
 import argparse
 import logging
@@ -25,12 +27,22 @@ def parse_commandline(argv):
     parser.add_argument("-d", dest="display", type=int, metavar="N",
             default=10,
             help="Number of results to display [%(default)s].")
-    parser.add_argument("--taxdumpdir", dest="taxdumpdir", metavar="FILE",
+    parser.add_argument("--taxdumpdir", dest="taxdumpdir", metavar="DIR",
             default="/shared/genomes/NCBI/taxonomy/taxdump/",
             help="Path to NCBI Taxonomy dump folder (must contain 'names.dmp', 'nodes.dmp' [%(default)s].")
     parser.add_argument("--pickle", dest="id_gi_accno_pickle", metavar="FILE",
             default="id_gi_accno.pkl",
             help="Filename of ID_GI_ACCNO pickle [%(default)s].")
+    parser.add_argument("--taxtree_pickle",  dest="taxtree_pickle", metavar="FILE",
+            default="taxtree.pkl",
+            help="Filename of pickled previously constructed taxtree to load instead of making it from scratch [%(default)s].")
+    parser.add_argument("--rebase_tree", dest="rebase_tree", metavar="S", type=str,
+            default="2", 
+            help="Rebase the taxonomic tree to this node (taxid). Only applicable when creating tree from scratch [%(default)s].")
+    parser.add_argument("--taxonomic_level", dest="taxonomic_level", metavar="LVL",
+            choices=["subspecies", "species", "genus", "family"], #, "order", "class", "phylum", "superkingdom"],
+            default="species",
+            help="Set the taxonomic level on which hits are grouped [%(default)s].")
 
     devoptions = parser.add_argument_group("Developer options", "Voids warranty ;)")
     devoptions.add_argument("--loglevel", choices=["INFO", "DEBUG"],
@@ -166,13 +178,32 @@ def print_hits(sorted_scores_list, tree, n=10):
         print "{:>3f}: {:<11} {:<}".format(score, accno, taxname)
 
 
+def load_taxtree(taxtree_pickle, taxdumpdir, id_gi_accno_pickle, rebase):
+    """Determine if previous taxtree_pickle is available and load it, otherwise create new.
+    """
+    if os.path.isfile(taxtree_pickle):
+        logging.debug("Found taxtree pickle '{}', loading...".format(taxtree_pickle))
+        with open(taxtree_pickle, 'rb') as pickled_tree:
+            tree = cPickle.load(pickled_tree)
+        logging.debug("Taxtree pickle '{}' loaded.".format(taxtree_pickle))
+    else:
+        logging.debug("Found no pickled taxtree called '{}', creating one from scratch.".format(taxtree_pickle))
+        tree = taxtree.load_ncbi_tree_from_taxdump(taxdumpdir, id_gi_accno_pickle, rebase=rebase)
+        with open(taxtree_pickle, 'wb') as picklejar:
+            cPickle.dump(tree, picklejar, -1)
+        logging.debug("Pickled taxtree to '{}'.".format(taxtree_pickle))
+
+    return tree
+
+
+
 
 if __name__ == "__main__":
     
     options = parse_commandline(argv)
 
     # Load taxtree
-    tree = taxtree.load_ncbi_tree_from_taxdump(options.taxdumpdir, options.id_gi_accno_pickle)
+    tree = load_taxtree(options.taxtree_pickle, options.taxdumpdir, options.id_gi_accno_pickle, options.rebase_tree)
 
     for pslfile in options.PSLFILE:
         hits = parse_blat_output(pslfile)
@@ -182,5 +213,3 @@ if __name__ == "__main__":
 
         print "------------------------------ Score ranking in {}".format(pslfile)
         print_hits(scored_hits, tree, n=options.display)
-
-
