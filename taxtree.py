@@ -12,20 +12,6 @@ import os
 from ete2 import Tree
 
 
-def read_accession_names_map(mapfile):
-    """Reads accession: name mappings"""
-    accno_name = {}
-    with open(mapfile) as f:
-        for line in f:
-            accno, name = line.strip().split("\t")
-            last_token = name.split()[-1].lower()
-            if last_token.startswith(("contig","ctg")):
-                name = " ".join(name.split()[:-1])
-            elif last_token.startswith("genome"):
-                name = " ".join(name.split()[:-2])
-            accno_name[name] = accno
-    return accno_name
-
 
 def read_gi_accno_from_fasta_headers(headers):
     """Parse gi and accno from fasta headers."""
