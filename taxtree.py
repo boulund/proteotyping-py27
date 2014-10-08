@@ -155,7 +155,13 @@ def load_ncbi_tree_from_taxdump(dumpdir, taxid_gi_accno_pickle, rebase=0):
 
 
 def search_for_accno(tree, accno):
-    """Searches a tree for a node with node.accno attribute == accno"""
+    """Searches a tree for a node with node.accno attribute == accno.
+    
+    The accno argument can also be a list of accno's to search for, then a list
+    of nodes that match the critera are returned.
+    The result is returned in a list, even if only one node was found, for
+    consistency with when multiple nodes are searched for.  
+    """
     if isinstance(accno, list):
         result = []
         for acession in accno:

@@ -203,7 +203,8 @@ if __name__ == "__main__":
     options = parse_commandline(argv)
 
     # Load taxtree
-    tree = load_taxtree(options.taxtree_pickle, options.taxdumpdir, options.id_gi_accno_pickle, options.rebase_tree)
+    tree = load_taxtree(options.taxtree_pickle, 
+            options.taxdumpdir, options.id_gi_accno_pickle, options.rebase_tree)
 
     for pslfile in options.PSLFILE:
         hits = parse_blat_output(pslfile)
