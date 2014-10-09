@@ -21,7 +21,7 @@ def parse_commandline(argv):
     desc = """Proteotyping pipeline. (c) Fredrik Boulund 2014."""
     parser = argparse.ArgumentParser(description=desc)
 
-    parser.add_argument("PSLFILE", nargs="*",
+    parser.add_argument("FILE", nargs="*",
             help="BLAT output file.")
 
     parser.add_argument("-d", dest="display", type=int, metavar="N",
@@ -43,11 +43,31 @@ def parse_commandline(argv):
             choices=["subspecies", "species", "genus", "family"], #, "order", "class", "phylum", "superkingdom"],
             default="species",
             help="Set the taxonomic level on which hits are grouped [%(default)s].")
+    parser.add_argument("-m", "--min_matches", dest="min_matches", metavar="m", type=int,
+            default=15, #0
+            help="Filter out hits with less than this  number of matches [%(default)s].")
+    parser.add_argument("-M", "--max_mismatches", dest="max_mismatches", metavar="M", type=int,
+            default=0, #100, #sys.maxint,
+            help="Filter out hits with more than or equal to this number of mismatches [%(default)s].")
+    parser.add_argument("-i", "--identity", dest="identity", metavar="I", type=float,
+            default=90,
+            help="Filter out hits with less than or equal to this percentage identity [%(default)s].")
+    parser.add_argument("--remove_noninformative", dest="remove_noninformative", action="store_false",
+            default=True, # TODO: This is unintuitive: reverse wording
+            help="Remove fragments that match to more than one entity at the specific taxonomic level [%(default)s].")
+
 
     devoptions = parser.add_argument_group("Developer options", "Voids warranty ;)")
     devoptions.add_argument("--loglevel", choices=["INFO", "DEBUG"],
-            default="DEBUG", 
+            default="INFO", 
             help="Set logging level [%(default)s].")
+    devoptions.add_argument("--best_hits_only", dest="best_hits_only", action="store_true",
+            default=False,
+            help="For each fragment, remove hits that have less than the maximum number of matches and more than the minimum number of mismatches. [%(default)s].")
+    devoptions.add_argument("--file_format", dest="file_format", 
+            choices=["blast8","psl"],
+            default="blast8",
+            help="Specify format of mappings file from blat [%(default)s].")
 
     if len(argv) < 2:
         parser.print_help()
@@ -81,101 +101,142 @@ def parse_accno(s, group=1):
 
 
 
-def parse_blat_output(filename):
+def parse_blat_output(filename, file_format="blast8"):
     """Parses blat output. Returns all hits for each fragment.
-       A hit is a named tuple with the following fields:
-       matches, mismatches, accno, score.
+
+    A hit is a named tuple with the following fields:
+    target_accno, identity, mathes, mismatches, score.
     """
-    with open(filename) as f:
-        line = f.readline()
-        if not line.startswith("psLayout"):
-            logging.debug("File '{}' not blat output format?".format(filename))
-            exit()
-        else:
-            [f.readline() for x in range(0,4)] # Read past column headers
 
-        Hit = namedtuple("Hit", ["matches", "mismatches", "accno", "score"])
-        hits = {}
-        for line in f:
-            split_line = line.split()
-            matches, mismatches, repmatches = split_line[0:3]
-            ncount, qinserts, qbaseinserts, tinserts, tbaseinserts = split_line[3:8]
-            fragment_id = split_line[9]
-            accno = parse_accno(split_line[13], group=1)
-            hit = Hit(matches, mismatches, accno, 0)
-            try:
-                hits[fragment_id].append(hit)
-            except KeyError:
-                hits[fragment_id] = [hit]
+    Hit = namedtuple("Hit", ["target_accno", "identity", "matches", "mismatches", "score"])
+    hit_counter = 0
+    hits = {}
 
-        return hits
+    if file_format == "blast8":
+        with open(filename) as blast8:
+            counter = 0
+            for line in blast8:
+                blast8_line = line.split()
+                fragment_id = blast8_line[0]
+                target_accno = parse_accno(blast8_line[1])
+                identity = float(blast8_line[2])
+                matches = int(blast8_line[3])
+                mismatches = int(blast8_line[4])
+                hit = Hit(target_accno, identity, matches, mismatches, 0)
+                try:
+                    hits[fragment_id].append(hit)
+                except KeyError:
+                    hits[fragment_id] = [hit]
+                hit_counter += 1
+    elif file_format == "psl":
+        with open(filename) as f:
+            line = f.readline()
+            if not line.startswith("psLayout"):
+                logging.error("File '{}' not blat output format?".format(filename))
+                exit()
+            else:
+                [f.readline() for x in range(0,4)] # Skip past column headers
+
+            hits = {}
+            for line in f:
+                split_line = line.split()
+                matches, mismatches, repmatches = [int(info) for info in split_line[0:3]]
+                ncount, qinserts, qbaseinserts, tinserts, tbaseinserts = split_line[3:8]
+                fragment_id = split_line[9]
+                target_accno = parse_accno(split_line[13], group=1)
+                hit = Hit(target_accno, -1, matches, mismatches, 0) # TODO: compute identity
+                try:
+                    hits[fragment_id].append(hit)
+                except KeyError:
+                    hits[fragment_id] = [hit]
+    else:
+        logging.error("Don't know what to do with file format '{}'.".format(file_format))
+        exit()
+    logging.info("Parsed {} hits for {} fragments.".format(hit_counter, len(hits)))
+    return hits
 
 
 
-def choose_best_hits(hits):
-    """Choose the best hit(s) from a list of hits."""
+def filter_hits(hits, remove_noninformative, identity, best_hits_only, matches, mismatches):
+    """Filter hits based on user critera.
+    """
 
+    filtered_hits = {}
     for fragment_id, hitlist in hits.iteritems():
         startlen = len(hitlist)
-        # First, filter out hits with maximum number of matches
+
+        # Remove non-informative fragments
+        if remove_noninformative:
+            if startlen == 1:
+                pass
+            else:
+                logging.debug("Fragment '{}' had {} hits and was removed.".format(fragment_id, startlen))
+                continue
+
+        # Filter hits based on user critera
         hitlist.sort(key=lambda hit: hit.matches, reverse=True)
-        hit_max_matches = max(hitlist)
-        max_matches_positions = [i for i, hit in enumerate(hitlist) if hit.matches == hit_max_matches.matches]
-        hitlist = [hitlist[pos] for pos in max_matches_positions]
+        hitlist = [hit for hit in hitlist if hit.matches >= matches]
+        filtered_hitlist = []
+        for hit in hitlist:
+            if hit.identity >= identity and hit.matches >= matches and hit.mismatches <= mismatches:
+                filtered_hitlist.append(hit)
+        if len(filtered_hitlist)>0:
+            filtered_hits[fragment_id] = filtered_hitlist
 
-        # Second, filter out hits with more mismatches than minimum
-        hit_min_mismatches = min(hitlist, key=lambda hit: hit.mismatches)
-        min_mismatches_positions = [i for i, hit in enumerate(hitlist) if hit.mismatches == hit_min_mismatches.mismatches]
-        hitlist = [hitlist[pos] for pos in min_mismatches_positions]
-        logging.debug("Removed {} hits for fragment {}".format(startlen-len(hitlist), fragment_id))
+    logging.info("Filtered {} fragments. {} fragments remain.".format(len(hits)-len(filtered_hits), len(filtered_hits)))
 
-        hits[fragment_id] = ([hit.accno for hit in hitlist], startlen)
-    return hits 
-
+    return filtered_hits
 
 
-def score_hits(hits):
-    """Scores the most commonly occuring hits with the reciprocial of their
-    number of hits per fragment.
-    
-    Returns a sorted list with (score,accno) tuples.
+
+def insert_hits_into_tree(tree, hits):
+    """Updates counts on nodes in-place.
     """
-
-    scores = {}
-    for key in hits.iterkeys():
-        numhits = hits[key][1]
-        for accno in hits[key][0]:
-            try:
-                scores[accno] += 1/numhits
-            except KeyError:
-                scores[accno] = 1/numhits
-
-    scores_list = list(scores.items())
-    scores_list_reversed = [(pair[1], pair[0]) for pair in scores_list]
-    sorted_scores_list = sorted(scores_list_reversed, 
-                                key=lambda pair: pair[0], #sort by score
-                                reverse=True)
-    return sorted_scores_list
-
-
-
-def insert_scores_into_tree(tree, scored_hits):
-    """Walk the tree and insert the score for nodes with hits."""
-    scoredict = dict([(h[1], h[0]) for h in scored_hits])
-    accnos = set(scoredict.keys())
+    accnos_set = set()
+    accno_fragment_id = {}
+    for fragment_id, hitlist in hits.iteritems():
+        for hit in hitlist:
+            accnos_set.add(hit.target_accno)
+            accno_fragment_id[hit.target_accno] = fragment_id
     for node in tree.traverse():
-        if node.accno and node.accno[0] in accnos:
-            node.score = scoredict[node.accno[0]]
+        for accno in node.accno:
+            if accno in accnos_set:
+                node.count += len(hits[accno_fragment_id[accno]])
+                logging.debug("Updated count of node {} with accno {} to {}.".format(node.name, accno, node.count)) # Verbose
 
 
+def sum_up_to_taxonomic_level(tree, taxonomic_level):
+    """Sums the count of all counts below a specified level to nodes at the specified level.
+    """
+    for node in tree.traverse(is_leaf_fn=lambda n: n.rank == taxonomic_level):
+        for child in node.iter_descendants():
+            node.count += child.count
+        logging.debug("Node {} now has a count of {}.".format(node.name, node.count)) # Verbose
 
-def print_hits(sorted_scores_list, tree, n=10):
-    """Prints the top 'n' hits."""
-    for i in xrange(0,n):
-        score, accno = sorted_scores_list[i]
-        nodes = taxtree.search_for_accno(tree, accno)
-        taxname = nodes[0].taxname
-        print "{:>3f}: {:<11} {:<}".format(score, accno, taxname)
+
+def print_top_n_hits(tree, taxonomic_level, n=10):
+    """Prints the top 'n' nodes with highest counts.
+    """
+    nodes_with_counts = []
+    for node in tree.traverse():
+        if node.rank == taxonomic_level and node.count > 0:
+            nodes_with_counts.append(node)
+
+    #print nodes_with_counts
+    nodes_with_counts.sort(key=lambda n: n.count, reverse=True)
+    #print nodes_with_counts
+
+    num_nodes = len(nodes_with_counts)
+    if num_nodes > 1:
+        if num_nodes < n:
+            n = num_nodes
+        print "PERCENTAGE  #FRAGMENTS  ACCNO(S)    TAXNAME"  
+        for i in xrange(0,n):
+            n = nodes_with_counts[i]
+            print "{:>10.3f}  {:>10}  {:<10}  {:<}".format(n.count/float(totalhits), n.count, ";".join(n.accno), n.taxname)
+            #print n.taxname, n.accno, n.count, n.count/float(totalhits)
+    else:
+        print "Nothing filtered through at {} level.".format(taxonomic_level)
 
 
 def load_taxtree(taxtree_pickle, taxdumpdir, id_gi_accno_pickle, rebase):
@@ -192,7 +253,6 @@ def load_taxtree(taxtree_pickle, taxdumpdir, id_gi_accno_pickle, rebase):
         with open(taxtree_pickle, 'wb') as picklejar:
             cPickle.dump(tree, picklejar, -1)
         logging.debug("Pickled taxtree to '{}'.".format(taxtree_pickle))
-
     return tree
 
 
@@ -206,11 +266,23 @@ if __name__ == "__main__":
     tree = load_taxtree(options.taxtree_pickle, 
             options.taxdumpdir, options.id_gi_accno_pickle, options.rebase_tree)
 
-    for pslfile in options.PSLFILE:
-        hits = parse_blat_output(pslfile)
-        best_hits = choose_best_hits(hits)
-        scored_hits = score_hits(best_hits)
-        insert_scores_into_tree(tree, scored_hits)
+    for filename in options.FILE:
+        hits = parse_blat_output(filename, options.file_format)
 
-        print "------------------------------ Score ranking in {}".format(pslfile)
-        print_hits(scored_hits, tree, n=options.display)
+        filtered_hits = filter_hits(hits, 
+                options.remove_noninformative,
+                options.identity,
+                options.min_matches,
+                options.max_mismatches,
+                options.best_hits_only)
+
+        insert_hits_into_tree(tree, filtered_hits)
+        sum_up_to_taxonomic_level(tree, options.taxonomic_level)
+
+        totalhits = sum(map(len, [hits for hits in filtered_hits.itervalues()]))
+        
+        print "-"*68
+        print "Results at {} level for file {}.".format(options.taxonomic_level, filename)
+        print "Total number of hits: {}.".format(totalhits)
+        print_top_n_hits(tree, options.taxonomic_level, n=options.display)
+
