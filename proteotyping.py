@@ -69,6 +69,9 @@ def parse_commandline(argv):
             choices=["blast8","psl"],
             default="blast8",
             help="Specify format of mappings file from blat [%(default)s].")
+    devoptions.add_argument("--walk", dest="walk", action="store_true",
+            default=False,
+            help="Instead of only visiting 'leaf' nodes when printing, walk the entire distance from the root node down [%(default)s].")
 
     if len(argv) < 2:
         parser.print_help()
@@ -226,19 +229,26 @@ def sum_up_the_tree(tree):
             parent.count += leaf.count
 
 
-def print_top_n_hits(tree, taxonomic_rank, totalhits, n=10):
+def print_top_n_hits(tree, taxonomic_rank, totalhits, n=10, walk=False):
     """Prints the top 'n' nodes with the highest counts (and thus percentages).
     """
     nodes_to_print = []
-    for node in tree.iter_leaves(is_leaf_fn=lambda n: n.rank == taxonomic_rank and n.count > 0):
-        nodes_to_print.append(node)
+    if walk:
+        for node in tree.traverse(is_leaf_fn=lambda n: n.rank == taxonomic_rank):
+            if node.count > 0:
+                nodes_to_print.append(node)
+    else:
+        for node in tree.iter_leaves(is_leaf_fn=lambda n: n.rank == taxonomic_rank and n.count > 0):
+            nodes_to_print.append(node)
     nodes_to_print.sort(key=lambda n: n.count, reverse=True)
     num_nodes = len(nodes_to_print)
     if num_nodes > 0:
         if num_nodes < n:
-            n = num_nodes
+            N = num_nodes
+        else:
+            N = n
         print "     %  #         TAXID       TAXNAME                         ACCNO(s)"  
-        for i in xrange(0,n):
+        for i in xrange(0,N):
             n = nodes_to_print[i]
             print "{:>6.2f}  {:<8}  {:<10}  {:<30}  {:<}".format(100*n.count/float(totalhits), n.count, n.name, n.taxname, ";".join(n.accno))
     else:
@@ -290,5 +300,5 @@ if __name__ == "__main__":
         print "-"*68
         print "Results at {} level for file {}.".format(options.taxonomic_rank, filename)
         print "Total hits: {}".format(totalhits)
-        print_top_n_hits(tree, options.taxonomic_rank, totalhits, n=options.display)
+        print_top_n_hits(tree, options.taxonomic_rank, totalhits, n=options.display, walk=options.walk)
 
