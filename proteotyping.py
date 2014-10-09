@@ -40,8 +40,8 @@ def parse_commandline(argv):
     parser.add_argument("--rebase_tree", dest="rebase_tree", metavar="S", type=str,
             default="2", 
             help="Rebase the taxonomic tree to this node (taxid). Only applicable when creating tree from scratch [%(default)s].")
-    parser.add_argument("--taxonomic_rank", dest="taxonomic_rank", metavar="LVL",
-            choices=["subspecies", "species", "genus", "family"], #, "order", "class", "phylum", "superkingdom"],
+    parser.add_argument("--taxonomic_rank", dest="taxonomic_rank", metavar="LVL", type=str,
+            choices=["no rank", "subspecies", "species", "genus", "family", "order", "class", "phylum", "superkingdom"],
             default="species",
             help="Set the taxonomic level on which hits are grouped [%(default)s].")
     parser.add_argument("-m", "--min_matches", dest="min_matches", metavar="m", type=int,
@@ -211,54 +211,36 @@ def insert_hits_into_tree(tree, hits):
                 logging.debug("Updated count of node {} with accno {} to {}.".format(node.name, accno, node.count)) # Verbose
 
 
-def sum_up_to_taxonomic_rank(tree, taxonomic_rank):
-    """Sums the count of all counts below a specified level to nodes at the specified level.
-    """
-    for node in tree.traverse(is_leaf_fn=lambda n: n.rank == taxonomic_rank):
-        for child in node.iter_descendants():
-            node.count += child.count
-        logging.debug("Node {} now has a count of {}.".format(node.name, node.count)) # Verbose
-
-
 def sum_up_the_tree(tree):
     """Sums counts up the taxonomic tree, all the way to the root node.
 
     In the end, root node.count should be the same as the total number of
     counts in the tree when starting out.
     """
-    logging.info("Root node.count={}.".format(tree.count))
-    for leaf in tree.get_leaves(is_leaf_fn=lambda n: n.count > 0): #(is_leaf_fn=lambda n: n.count > 0):
+    for leaf in tree.get_leaves(): #(is_leaf_fn=lambda n: n.count > 0):
         lineage = leaf.get_ancestors()
         lineage.insert(0, leaf)
         counts_per_node = [n.count for n in lineage]
         cumulative_counts = list(cumsum(counts_per_node))
         for idx, parent in enumerate(lineage[1:]):
             parent.count += leaf.count
-    logging.info("Root node.count={}.".format(tree.count))
 
 
-
-
-        
-
-
-def print_top_n_hits(tree, taxonomic_rank, n=10):
-    """Prints the top 'n' nodes with highest counts.
+def print_top_n_hits(tree, taxonomic_rank, totalhits, n=10):
+    """Prints the top 'n' nodes with the highest counts (and thus percentages).
     """
-    nodes_with_counts = []
-    for node in tree.traverse(is_leaf_fn=lambda n: n.rank == taxonomic_rank):# and n.count > 0):
-        #if node.rank == taxonomic_rank and node.count > 0:
-            nodes_with_counts.append(node)
-    nodes_with_counts.sort(key=lambda n: n.count, reverse=True)
-    num_nodes = len(nodes_with_counts)
-    if num_nodes > 1:
+    nodes_to_print = []
+    for node in tree.iter_leaves(is_leaf_fn=lambda n: n.rank == taxonomic_rank and n.count > 0):
+        nodes_to_print.append(node)
+    nodes_to_print.sort(key=lambda n: n.count, reverse=True)
+    num_nodes = len(nodes_to_print)
+    if num_nodes > 0:
         if num_nodes < n:
             n = num_nodes
-        print "%      #         TAXID       TAXNAME                    ACCNO(s)"  
+        print "     %  #         TAXID       TAXNAME                         ACCNO(s)"  
         for i in xrange(0,n):
-            n = nodes_with_counts[i]
-            print "{:>5.3f}  {:<8}  {:<10}  {:<25}  {:<}".format(n.count/float(totalhits), n.count, n.name, n.taxname, ";".join(n.accno))
-            #print n.taxname, n.accno, n.count, n.count/float(totalhits)
+            n = nodes_to_print[i]
+            print "{:>6.2f}  {:<8}  {:<10}  {:<30}  {:<}".format(100*n.count/float(totalhits), n.count, n.name, n.taxname, ";".join(n.accno))
     else:
         print "Nothing filtered through at {} level.".format(taxonomic_rank)
 
@@ -302,12 +284,11 @@ if __name__ == "__main__":
 
         insert_hits_into_tree(tree, filtered_hits)
         sum_up_the_tree(tree)
-        #sum_up_to_taxonomic_rank(tree, options.taxonomic_rank)
 
         totalhits = sum(map(len, [hits for hits in filtered_hits.itervalues()]))
         
         print "-"*68
         print "Results at {} level for file {}.".format(options.taxonomic_rank, filename)
-        print "Total number of hits: {}.".format(totalhits)
-        print_top_n_hits(tree, options.taxonomic_rank, n=options.display)
+        print "Total hits: {}".format(totalhits)
+        print_top_n_hits(tree, options.taxonomic_rank, totalhits, n=options.display)
 
