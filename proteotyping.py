@@ -7,6 +7,7 @@
 from __future__ import division
 from sys import argv, exit
 from collections import namedtuple
+from numpy import cumsum
 import cPickle
 import os
 import taxtree
@@ -39,7 +40,7 @@ def parse_commandline(argv):
     parser.add_argument("--rebase_tree", dest="rebase_tree", metavar="S", type=str,
             default="2", 
             help="Rebase the taxonomic tree to this node (taxid). Only applicable when creating tree from scratch [%(default)s].")
-    parser.add_argument("--taxonomic_level", dest="taxonomic_level", metavar="LVL",
+    parser.add_argument("--taxonomic_rank", dest="taxonomic_rank", metavar="LVL",
             choices=["subspecies", "species", "genus", "family"], #, "order", "class", "phylum", "superkingdom"],
             default="species",
             help="Set the taxonomic level on which hits are grouped [%(default)s].")
@@ -129,6 +130,7 @@ def parse_blat_output(filename, file_format="blast8"):
                     hits[fragment_id] = [hit]
                 hit_counter += 1
     elif file_format == "psl":
+        logging.warning("BLAT psl format not completely supported. Identity not computed.") # TODO: compute identity
         with open(filename) as f:
             line = f.readline()
             if not line.startswith("psLayout"):
@@ -183,7 +185,8 @@ def filter_hits(hits, remove_noninformative, identity, best_hits_only, matches, 
         if len(filtered_hitlist)>0:
             filtered_hits[fragment_id] = filtered_hitlist
 
-    logging.info("Filtered {} fragments. {} fragments remain.".format(len(hits)-len(filtered_hits), len(filtered_hits)))
+    logging.info("Filtered {} fragments. {} fragments with {} hits remain.".format(len(hits)-len(filtered_hits), 
+        len(filtered_hits), len([hit for hit in filtered_hits.itervalues()])))
 
     return filtered_hits
 
@@ -193,50 +196,71 @@ def insert_hits_into_tree(tree, hits):
     """Updates counts on nodes in-place.
     """
     accnos_set = set()
-    accno_fragment_id = {}
+    count_per_accno = {}
     for fragment_id, hitlist in hits.iteritems():
         for hit in hitlist:
             accnos_set.add(hit.target_accno)
-            accno_fragment_id[hit.target_accno] = fragment_id
+            try:
+                count_per_accno[hit.target_accno] += len(hits[fragment_id])
+            except KeyError:
+                count_per_accno[hit.target_accno] = len(hits[fragment_id])
     for node in tree.traverse():
         for accno in node.accno:
             if accno in accnos_set:
-                node.count += len(hits[accno_fragment_id[accno]])
+                node.count += count_per_accno[accno] 
                 logging.debug("Updated count of node {} with accno {} to {}.".format(node.name, accno, node.count)) # Verbose
 
 
-def sum_up_to_taxonomic_level(tree, taxonomic_level):
+def sum_up_to_taxonomic_rank(tree, taxonomic_rank):
     """Sums the count of all counts below a specified level to nodes at the specified level.
     """
-    for node in tree.traverse(is_leaf_fn=lambda n: n.rank == taxonomic_level):
+    for node in tree.traverse(is_leaf_fn=lambda n: n.rank == taxonomic_rank):
         for child in node.iter_descendants():
             node.count += child.count
         logging.debug("Node {} now has a count of {}.".format(node.name, node.count)) # Verbose
 
 
-def print_top_n_hits(tree, taxonomic_level, n=10):
+def sum_up_the_tree(tree):
+    """Sums counts up the taxonomic tree, all the way to the root node.
+
+    In the end, root node.count should be the same as the total number of
+    counts in the tree when starting out.
+    """
+    logging.info("Root node.count={}.".format(tree.count))
+    for leaf in tree.get_leaves(is_leaf_fn=lambda n: n.count > 0): #(is_leaf_fn=lambda n: n.count > 0):
+        lineage = leaf.get_ancestors()
+        lineage.insert(0, leaf)
+        counts_per_node = [n.count for n in lineage]
+        cumulative_counts = list(cumsum(counts_per_node))
+        for idx, parent in enumerate(lineage[1:]):
+            parent.count += leaf.count
+    logging.info("Root node.count={}.".format(tree.count))
+
+
+
+
+        
+
+
+def print_top_n_hits(tree, taxonomic_rank, n=10):
     """Prints the top 'n' nodes with highest counts.
     """
     nodes_with_counts = []
-    for node in tree.traverse():
-        if node.rank == taxonomic_level and node.count > 0:
+    for node in tree.traverse(is_leaf_fn=lambda n: n.rank == taxonomic_rank):# and n.count > 0):
+        #if node.rank == taxonomic_rank and node.count > 0:
             nodes_with_counts.append(node)
-
-    #print nodes_with_counts
     nodes_with_counts.sort(key=lambda n: n.count, reverse=True)
-    #print nodes_with_counts
-
     num_nodes = len(nodes_with_counts)
     if num_nodes > 1:
         if num_nodes < n:
             n = num_nodes
-        print "PERCENTAGE  #FRAGMENTS  ACCNO(S)    TAXNAME"  
+        print "%      #         TAXID       TAXNAME                    ACCNO(s)"  
         for i in xrange(0,n):
             n = nodes_with_counts[i]
-            print "{:>10.3f}  {:>10}  {:<10}  {:<}".format(n.count/float(totalhits), n.count, ";".join(n.accno), n.taxname)
+            print "{:>5.3f}  {:<8}  {:<10}  {:<25}  {:<}".format(n.count/float(totalhits), n.count, n.name, n.taxname, ";".join(n.accno))
             #print n.taxname, n.accno, n.count, n.count/float(totalhits)
     else:
-        print "Nothing filtered through at {} level.".format(taxonomic_level)
+        print "Nothing filtered through at {} level.".format(taxonomic_rank)
 
 
 def load_taxtree(taxtree_pickle, taxdumpdir, id_gi_accno_pickle, rebase):
@@ -277,12 +301,13 @@ if __name__ == "__main__":
                 options.best_hits_only)
 
         insert_hits_into_tree(tree, filtered_hits)
-        sum_up_to_taxonomic_level(tree, options.taxonomic_level)
+        sum_up_the_tree(tree)
+        #sum_up_to_taxonomic_rank(tree, options.taxonomic_rank)
 
         totalhits = sum(map(len, [hits for hits in filtered_hits.itervalues()]))
         
         print "-"*68
-        print "Results at {} level for file {}.".format(options.taxonomic_level, filename)
+        print "Results at {} level for file {}.".format(options.taxonomic_rank, filename)
         print "Total number of hits: {}.".format(totalhits)
-        print_top_n_hits(tree, options.taxonomic_level, n=options.display)
+        print_top_n_hits(tree, options.taxonomic_rank, n=options.display)
 
