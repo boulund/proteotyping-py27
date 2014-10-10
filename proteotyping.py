@@ -272,6 +272,26 @@ def load_taxtree(taxtree_pickle, taxdumpdir, id_gi_accno_pickle, rebase):
     return tree
 
 
+def main(filename, options):
+    """Main function that runs the complete pipeline logic.
+    """
+    hits = parse_blat_output(filename, options.file_format)
+    filtered_hits = filter_hits(hits, 
+            options.remove_noninformative,
+            options.identity,
+            options.min_matches,
+            options.max_mismatches,
+            options.best_hits_only)
+    totalhits = sum(map(len, [hits for hits in filtered_hits.itervalues()]))
+    insert_hits_into_tree(tree, filtered_hits)
+    sum_up_the_tree(tree)
+
+    print "-"*68
+    print "Results at {} level for file {}.".format(options.taxonomic_rank, filename)
+    print "Total hits: {}".format(totalhits)
+    print_top_n_hits(tree, options.taxonomic_rank, totalhits, n=options.display, walk=options.walk)
+
+
 
 
 if __name__ == "__main__":
@@ -283,22 +303,4 @@ if __name__ == "__main__":
             options.taxdumpdir, options.id_gi_accno_pickle, options.rebase_tree)
 
     for filename in options.FILE:
-        hits = parse_blat_output(filename, options.file_format)
-
-        filtered_hits = filter_hits(hits, 
-                options.remove_noninformative,
-                options.identity,
-                options.min_matches,
-                options.max_mismatches,
-                options.best_hits_only)
-
-        insert_hits_into_tree(tree, filtered_hits)
-        sum_up_the_tree(tree)
-
-        totalhits = sum(map(len, [hits for hits in filtered_hits.itervalues()]))
-        
-        print "-"*68
-        print "Results at {} level for file {}.".format(options.taxonomic_rank, filename)
-        print "Total hits: {}".format(totalhits)
-        print_top_n_hits(tree, options.taxonomic_rank, totalhits, n=options.display, walk=options.walk)
-
+        main(filename, options)
