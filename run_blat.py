@@ -66,15 +66,6 @@ def parallel_run_blat(filename):
         logging.error("BLAT: stdout: {}\n  stderr:{}".format(blat_output[0], blat_output[1]))
 
 
-def main(options):
-    """Main function.
-    """
-
-    for fastafile in options.FASTA:
-        run_blat(options.DB, fastafile, options.blat_options, options.OUTDIR)
-
-
-
 if __name__ == "__main__":
     options = parse_commandline()
 
@@ -84,5 +75,3 @@ if __name__ == "__main__":
         num_workers = len(options.FASTA)
 
     logging.debug("Creating pool of {} workers.".format(num_workers))
-    pool = Pool(processes=num_workers)
-    result = pool.map(parallel_run_blat, options.FASTA)
