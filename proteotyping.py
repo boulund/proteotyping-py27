@@ -22,9 +22,8 @@ def parse_commandline(argv):
     desc = """Proteotyping pipeline. (c) Fredrik Boulund 2014."""
     parser = argparse.ArgumentParser(description=desc)
 
-    parser.add_argument("FILE", nargs="*",
+    parser.add_argument("FILE", nargs="+",
             help="BLAT output file.")
-
     parser.add_argument("-d", dest="display", type=int, metavar="N",
             default=10,
             help="Number of results to display [%(default)s].")
