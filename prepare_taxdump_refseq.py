@@ -5,6 +5,7 @@
 # to reduce loading times for the proteotyping pipeline
 
 from sys import argv, exit
+from collections import namedtuple
 import time
 import re
 import logging
@@ -13,6 +14,9 @@ import cPickle
 import fnmatch
 import os
 
+
+# This needs to be global for pickle to work
+Annotation = namedtuple("Annotation", ["geneID", "startpos", "endpos", "strand"])
 
 def parse_fasta(filename):
     """Reads information from FASTA headers.
@@ -47,8 +51,45 @@ def find_files(directory, pattern):
                 yield filename
 
 
-def filter_GIs_from_dmp_to_pickle(gi_taxid_dmp, gi_accno, pickle_file):
-    """Creates a pickled dictionary with gi:taxid mappings for a set of GIs.
+def parse_gff(filename):
+    """Generator that parses gff files and yields annotations.
+    """
+    Annotation_info = namedtuple("Annotation", ["accno", "geneID", "startpos", "endpos", "strand"])
+    geneID_regex = re.compile(r'GeneID:(\d+)')
+    with open(filename) as gff_file:
+        if not gff_file.readline().startswith("##gff-version 3"):
+            logging.warning("'{}' doesn't appear to be a valid gff file, skipping.".format(filename))
+            return
+        [gff_file.readline() for x in xrange(0,4)] # skip header lines
+        for line in gff_file:
+            info = line.split("\t")
+            if not info[0].startswith("###") and info[2] == "gene":
+                accno = info[0]
+                startpos = int(info[3])
+                endpos = int(info[4])
+                strand = info[6]
+                infokeys = info[8]
+                hit = re.search(geneID_regex, infokeys)
+                if hit:
+                    geneID = hit.group(1)
+                    yield Annotation_info(accno, geneID, startpos, endpos, strand)
+
+
+def create_dict_accno_gff(refdir, pattern="*.gff"):
+    """Creates a dict with accno:gene_location mappings.
+    """
+    accno_gff = {}
+    for gff_file in find_files(refdir, pattern):
+        for info in parse_gff(gff_file):
+            try:
+                accno_gff[info.accno].append(Annotation(info.geneID, info.startpos, info.endpos, info.strand))
+            except KeyError:
+                accno_gff[info.accno] = [Annotation(info.geneID, info.startpos, info.endpos, info.strand)]
+    return accno_gff
+
+
+def filter_GIs_from_dmp_to_pickle(gi_taxid_dmp, gi_accno):
+    """Creates a dictionary with gi:taxid mappings for a set of GIs.
     """
     if not os.path.isfile(gi_taxid_dmp):
         raise IOError("Taxdump file {} not found.".format(gi_taxid_dmp))
@@ -73,9 +114,10 @@ def filter_GIs_from_dmp_to_pickle(gi_taxid_dmp, gi_accno, pickle_file):
         logging.debug("The following GIs were not included:")
         for gi in gis:
             logging.debug("{:>10}".format(gi))
-    with open(pickle_file, 'wb') as pkl:
-        cPickle.dump(taxid_gi_accno, pkl, -1) # Highest protocol available
     return taxid_gi_accno
+
+
+
 
 
 def create_dict_gi_accno(refdir, pattern):
@@ -114,11 +156,20 @@ def parse_commandline(argv):
     parser = argparse.ArgumentParser(description=desc)
 
     parser.add_argument("TAXIDS", help="Path to gi_taxid_nucl.dmp (two column format).")
-    parser.add_argument("REFDIR", help="Path to directory with reference sequences in FASTA format. Walks subfolders.")
+    parser.add_argument("REFDIR", help="Path to directory with reference sequences in FASTA format and sequence annotation in GFF format. Walks subfolders.")
 
-    parser.add_argument("-o", dest="output", default="id_gi_accno.pkl",
-            help="Output file [default %(default)s]")
-    parser.add_argument("-g", dest="globpattern", help="glob pattern for identifying FASTA files [%(default)s]", default="*.fna")
+    parser.add_argument("--id_go_accno_pickle", dest="id_gi_accno_pickle", metavar="FILE",
+            default="id_gi_accno.pkl",
+            help="Taxid_GI_ACCNO output file [default %(default)s]")
+    parser.add_argument("--accno_annotation_pickle", dest="accno_annotation_pickle", metavar="FILE",
+            default="accno_annotation.pkl",
+            help="ACCNO_Annotation output file [default %(default)s]")
+    parser.add_argument("-f", dest="globpattern_fasta", metavar="'GLOB'",
+            default="*.fna",
+            help="Glob pattern for identifying FASTA files [%(default)s]")
+    parser.add_argument("-g", dest="globpattern_gff", metavar="'GLOB'",
+            default="*.gff",
+            help="Glob pattern for identifying GFF files [%(default)s].")
 
     devoptions = parser.add_argument_group("Developer options")
     devoptions.add_argument("--loglevel", choices=["INFO", "DEBUG"], 
@@ -139,12 +190,31 @@ if __name__ == "__main__":
     options = parse_commandline(argv)
 
     tic = time.time()
-    logging.debug("Creating a set of GIs to include in the pickle...")
-    gi_accno = create_dict_gi_accno(options.REFDIR, options.globpattern)
+    logging.debug("Creating a set of GIs (based on FASTA headers) to include in the pickle...")
+    gi_accno = create_dict_gi_accno(options.REFDIR, options.globpattern_fasta)
     logging.debug("Found {} GIs in {} seconds.".format(len(gi_accno.keys()), time.time()-tic))
 
     tic = time.time()
     logging.debug("Filtering GIs from {}...".format(options.TAXIDS))
-    id_gi_accno = filter_GIs_from_dmp_to_pickle(options.TAXIDS, gi_accno, options.output)
-    logging.debug("Wrote {} entries to {}.".format(len(id_gi_accno.keys()), options.output))
+    id_gi_accno = filter_GIs_from_dmp_to_pickle(options.TAXIDS, gi_accno)
+    logging.debug("{} entries remaining".format(len(id_gi_accno.keys())))
     logging.debug("Time to filter GIs: {}.".format(time.time()-tic))
+
+    tic = time.time()
+    logging.debug("Writing pickle to '{}'.".format(options.id_gi_accno_pickle))
+    with open(options.id_gi_accno_pickle, 'wb') as pkl:
+        cPickle.dump(id_gi_accno, pkl, -1) # Highest protocol available
+    logging.debug("Time to write pickle: {}.".format(time.time()-tic))
+
+    tic = time.time()
+    logging.debug("Creating annotation dict (based on GFF files) to include in the pickle...")
+    accno_gff = create_dict_accno_gff(options.REFDIR, options.globpattern_gff)
+    logging.debug("Found {} annotations in {} seconds.".format(len(accno_gff.keys()), time.time()-tic))
+
+    tic = time.time()
+    logging.debug("Writing pickle to '{}'.".format(options.accno_annotation_pickle))
+    with open(options.accno_annotation_pickle, 'wb') as pkl:
+        cPickle.dump(accno_gff, pkl, -1) # Highest protocol available
+    logging.debug("Time to write pickle: {}.".format(time.time()-tic))
+
+

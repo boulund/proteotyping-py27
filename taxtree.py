@@ -33,7 +33,7 @@ def read_gi_accno_from_fasta_headers(headers):
     return gi_accno
 
 
-def load_ncbi_tree_from_taxdump(dumpdir, taxid_gi_accno_pickle, rebase=0):
+def load_ncbi_tree_from_taxdump(dumpdir, taxid_gi_accno_pickle, rebase=0, return_id_gi_accno_dict=False):
     """Loads NCBI taxonomy tree from NCBI taxdump files names.dmp, nodes.dmp.
 
     The rebase parameter can be used to rebase the tree to whatever node, e.g.
@@ -139,7 +139,9 @@ def load_ncbi_tree_from_taxdump(dumpdir, taxid_gi_accno_pickle, rebase=0):
     logging.debug("Linking completed. Tree loaded.")
     
     if rebase:
-        return t.search_nodes(name=rebase)[0].detach()
+        t = t.search_nodes(name=rebase)[0].detach()
+    if return_id_gi_accno_dict:
+        return (t, taxid2gi_accno)
     else:
         return t
 

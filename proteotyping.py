@@ -8,6 +8,7 @@ from __future__ import division
 from sys import argv, exit
 from collections import namedtuple
 from numpy import cumsum
+import operator
 import cPickle
 import os
 import taxtree
@@ -15,6 +16,7 @@ import argparse
 import logging
 import re
 
+from prepare_taxdump_refseq import find_files, Annotation
 
 def parse_commandline(argv):
     """Parse commandline arguments"""
@@ -28,14 +30,20 @@ def parse_commandline(argv):
             default=10,
             help="Number of results to display [%(default)s].")
     parser.add_argument("--taxdumpdir", dest="taxdumpdir", metavar="DIR",
-            default="/shared/genomes/NCBI/taxonomy/taxdump/",
+            default="/shared/db/NCBI/taxonomy/taxdump",
             help="Path to NCBI Taxonomy dump folder (must contain 'names.dmp', 'nodes.dmp' [%(default)s].")
-    parser.add_argument("--pickle", dest="id_gi_accno_pickle", metavar="FILE",
+    parser.add_argument("--id_gi_accno_pickle", dest="id_gi_accno_pickle", metavar="FILE",
             default="id_gi_accno.pkl",
+            help="Filename of ID_GI_ACCNO pickle [%(default)s].")
+    parser.add_argument("--accno_annotation_pickle", dest="accno_annotation_pickle", metavar="FILE",
+            default="accno_annotation.pkl",
             help="Filename of ID_GI_ACCNO pickle [%(default)s].")
     parser.add_argument("--taxtree_pickle",  dest="taxtree_pickle", metavar="FILE",
             default="taxtree.pkl",
             help="Filename of pickled previously constructed taxtree to load instead of making it from scratch [%(default)s].")
+    parser.add_argument("--gene_info", dest="gene_info_file", metavar="FILE",
+            default="/shared/db/NCBI/gene/gene_info",
+            help="NCBI 'gene_info' file [%(default)s].")
     parser.add_argument("--rebase_tree", dest="rebase_tree", metavar="S", type=str,
             default="2", 
             help="Rebase the taxonomic tree to this node (taxid). Only applicable when creating tree from scratch [%(default)s].")
@@ -55,6 +63,12 @@ def parse_commandline(argv):
     parser.add_argument("--remove_noninformative", dest="remove_noninformative", action="store_false",
             default=True, # TODO: This is unintuitive: reverse wording
             help="Remove fragments that match to more than one entity at the specific taxonomic level [%(default)s].")
+    parser.add_argument("--maxprint", dest="maxprint", metavar="N", type=int,
+            default=50,
+            help="Maximum number of hit annotations to print [%(default)s].")
+    parser.add_argument("--print_all_hit_annotations", dest="print_all_hit_annotations", action="store_true",
+            default=False,
+            help="Print a listing of all hit annotations (and not only hits from filtered peptide fragments) [%(default)s].")
 
 
     devoptions = parser.add_argument_group("Developer options", "Voids warranty ;)")
@@ -111,7 +125,7 @@ def parse_blat_output(filename, file_format="blast8"):
     target_accno, identity, mathes, mismatches, score.
     """
 
-    Hit = namedtuple("Hit", ["target_accno", "identity", "matches", "mismatches", "score"])
+    Hit = namedtuple("Hit", ["target_accno", "identity", "matches", "mismatches", "score", "startpos", "endpos"])
     hit_counter = 0
     hits = {}
 
@@ -125,7 +139,9 @@ def parse_blat_output(filename, file_format="blast8"):
                 identity = float(blast8_line[2])
                 matches = int(blast8_line[3])
                 mismatches = int(blast8_line[4])
-                hit = Hit(target_accno, identity, matches, mismatches, 0)
+                startpos = int(blast8_line[8])
+                endpos = int(blast8_line[9])
+                hit = Hit(target_accno, identity, matches, mismatches, 0, startpos, endpos)
                 try:
                     hits[fragment_id].append(hit)
                 except KeyError:
@@ -148,7 +164,7 @@ def parse_blat_output(filename, file_format="blast8"):
                 ncount, qinserts, qbaseinserts, tinserts, tbaseinserts = split_line[3:8]
                 fragment_id = split_line[9]
                 target_accno = parse_accno(split_line[13], group=1)
-                hit = Hit(target_accno, -1, matches, mismatches, 0) # TODO: compute identity
+                hit = Hit(target_accno, -1, matches, mismatches, 0, 0, 0) # TODO: compute identity, startpos, endpos
                 try:
                     hits[fragment_id].append(hit)
                 except KeyError:
@@ -271,13 +287,69 @@ def load_taxtree(taxtree_pickle, taxdumpdir, id_gi_accno_pickle, rebase):
     return tree
 
 
-def annotate_hits(hits, annotation_file, gene_info):
+def load_gene_info(gene_info_file):
+    """Reads NCBI gene_info a dictionary for geneID lookups.
+    """
+    gene_info = {}
+    with open(gene_info_file) as f:
+        if not f.readline().startswith("#Format:"):
+            logging.error("'{}' does not appear to be an NCBI gene_info file.".format(gene_info_file))
+            raise IOError("'{}' does not appear to be an NCBI gene_info file.".format(gene_info_file))
+        for line in f:
+            info = line.split("\t")
+            taxid = info[0]
+            geneID = info[1]
+            symbol = info[2]
+            desc = info[8]
+            gene_info[geneID] = (symbol, desc, taxid)
+    return gene_info
+
+
+
+def count_annotation_hits(hits, annotation_pickle):
     """Annotates hits to determine what genes were hit.
     """
 
-    #for hitlist in hits.itervalues():
-    pass
-        
+    with open(annotation_pickle, 'rb') as pkl:
+        annotation = cPickle.load(pkl)
+
+    gene_counts = {}
+    for hitlist in hits.itervalues():
+        for hit in hitlist:
+            accno = hit.target_accno
+            try:
+                for annot in annotation[accno]:
+                    if hit.startpos >= annot.startpos and hit.startpos <= annot.endpos:
+                        if hit.endpos <= annot.endpos and hit.endpos >= annot.startpos:
+                            try:
+                                gene_counts[annot.geneID] += 1
+                            except KeyError:
+                                gene_counts[annot.geneID] = 1
+            except KeyError:
+                pass
+                logging.warning("Found hits to {} but can't find annotation.".format(accno))
+
+    return gene_counts
+
+
+def print_gene_counts(gene_counts, gene_info, maxprint=50, sort=True):
+    """Prints counts of annotated regions with some gene info.
+    """
+    if sort:
+        counts = sorted(gene_counts.items(), key=operator.itemgetter(1), reverse=sort)
+    printcounter = 0
+    print "geneID    #     Symbol             Description" 
+    for geneID, count in counts:
+        if printcounter < maxprint:
+            try:
+                symbol, desc = gene_info[geneID][0:2]
+            except KeyError:
+                logging.warning("Couldn't find information for geneID {}.".format(geneID))
+            print "{:<9} {:<5} {:<18} {:<}".format(geneID, count, symbol, desc)
+            printcounter += 1
+        else:
+            break
+    print "Printed {} out of {} hit annotated regions.".format(printcounter, len(counts))
 
 
 def main(filename, options):
@@ -299,6 +371,16 @@ def main(filename, options):
     print_top_n_hits(tree, options.taxonomic_rank, totalhits, n=options.display, walk=options.walk)
     print " Total: {:<}".format(totalhits)
 
+    gene_info = load_gene_info(options.gene_info_file)
+    print "-"*68
+    if options.print_all_hit_annotations:
+        gene_counts = count_annotation_hits(hits, options.accno_annotation_pickle)
+        print "All hit annotated regions:"
+        print_gene_counts(gene_counts, gene_info, options.maxprint)
+    else:
+        gene_counts = count_annotation_hits(filtered_hits, options.accno_annotation_pickle)
+        print "Annotated regions hit by filtered fragments:"
+        print_gene_counts(gene_counts, gene_info, options.maxprint)
 
 
 
