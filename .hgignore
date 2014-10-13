@@ -5,3 +5,4 @@ src
 *.psl
 *.pyc
 *.pkl
+*.blast8
