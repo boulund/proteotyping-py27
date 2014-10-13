@@ -23,6 +23,14 @@ def parse_commandline():
     parser.add_argument("--remove_duplicates", dest="remove_duplicates", action="store_true",
             default=False,
             help="Remove duplicates [%(default)s].")
+    parser.add_argument("--confidence_level", dest="confidence_level", metavar="LVL",
+            choices=["Low", "Middle", "High"],
+            default="High",
+            help="Minimum confidence level of peptides to include in the FASTA output [%(default)s].")
+    parser.add_argument("--psm_ambiguity", dest="psm_ambiguity", metavar="AMB", 
+            choices=["Any", "Selected", "Unambigous"],
+            default="Unambigous",
+            help="Minimum PSM PSM ambiguity level of peptides to include in the FASTA output [%(default)s].")
     parser.add_argument("--loglevel", 
             choices=["INFO", "DEBUG"],
             default="DEBUG",
@@ -38,9 +46,28 @@ def parse_commandline():
     return options
 
 
-def convert_psms_to_fasta(psms, outdir, remove_duplicates=False):
+def convert_psms_to_fasta(psms, outdir, remove_duplicates=False, confidence_level, psm_ambiguity):
     """Parses psms.txt file and converts to FASTA, writes to outdir.
     """
+
+    if confidence_level == "Low":
+        confidence_level = set("Low", "Middle", "High")
+    elif confidence_level == "Middle":
+        confidence_level = set("Middle", "High")
+    elif confidence_level == "High":
+        confidence_level = set("High")
+    else:
+        logging.warning("Confidence level not properly specified: {}. Assuming 'High'".format(confidence_level))
+        confidence_level = set("High")
+    if psm_ambiguity == "Any":
+        psm_ambiguity = set("Unconsidered", "Selected", "Rejected", "Unambigous")
+    elif psm_ambiguity == "Selected":
+        psm_ambiguity = set("Selected", "Unambigous")
+    elif psm_ambiguity == "Unambigous":
+        psm_ambiguity = set("Unambigous")
+    else:
+        logging.warning("PSM ambiguity not properly specified: {}. Assuming 'Unambigous'".format(psm_ambiguity))
+        psm_ambiguity = set("Unambigous")
 
     if not path.exists(outdir):
         makedirs(outdir)
@@ -52,16 +79,20 @@ def convert_psms_to_fasta(psms, outdir, remove_duplicates=False):
             psmsfile.readline() # Skip header information
             for num, line in enumerate(psmsfile):
                 hitinfo = line.split()
-                #hitinfo = [info.strip('"') for info in hitinfo]
-                sequence = hitinfo[3].strip('"')
-                fastafile.write("{}\n{}\n".format(">{}".format(num), sequence))
+                hitinfo = [info.strip('"') for info in hitinfo]
+                confidence = hitinfo[0]
+                sequence = hitinfo[3]
+                ambiguity = hitinfo[[5]
+                if confidence in confidence_level and ambiguity in psm_ambiguity:
+                    fastafile.write("{}\n{}\n".format(">{}".format(num), sequence))
 
 
 def main(options):
     """Main.
     """
     for filename in options.FILE:
-        convert_psms_to_fasta(filename, options.outdir, options.remove_duplicates)
+        convert_psms_to_fasta(filename, options.outdir, 
+                options.remove_duplicates, options.confidence_level, options.psm_ambiguity)
 
 
 
