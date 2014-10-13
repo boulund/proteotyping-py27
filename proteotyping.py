@@ -187,7 +187,7 @@ def filter_hits(hits, remove_noninformative, identity, best_hits_only, matches, 
             filtered_hits[fragment_id] = filtered_hitlist
 
     logging.info("Filtered {} fragments. {} fragments with {} hits remain.".format(len(hits)-len(filtered_hits), 
-        len(filtered_hits), len([hit for hit in filtered_hits.itervalues()])))
+        len(filtered_hits), sum(map(len, [hits for hits in filtered_hits.itervalues()]))))
 
 
     return filtered_hits
@@ -282,7 +282,6 @@ def main(filename, options):
             options.max_mismatches,
             options.best_hits_only)
     totalhits = sum(map(len, [hits for hits in filtered_hits.itervalues()]))
-    print len([hit for hit in filtered_hits.itervalues()])
     insert_hits_into_tree(tree, filtered_hits)
     sum_up_the_tree(tree)
 
