@@ -163,7 +163,7 @@ if __name__ == "__main__":
     # Some prototype and debugging code...
     logging.basicConfig(level=logging.DEBUG)
     taxid_gi_accno_pickle = "id_gi_accno.pkl"
-    dumpdir = "/shared/genomes/NCBI/taxonomy/taxdump/"
+    dumpdir = "/shared/db/NCBI/taxonomy/taxdump/"
 
     tic = time.time()
     logging.debug("Reading tree from taxdump {}".format(dumpdir))

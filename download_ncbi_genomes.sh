@@ -9,5 +9,5 @@ mkdir bacterial_$date
 cd bacterial_$date
 wget ftp://ftp.ncbi.nih.gov/genomes/Bacteria/all.fna.tar.gz | tee -a download.log
 wget ftp://ftp.ncbi.nih.gov/genomes/Bacteria/all.gff.tar.gz | tee -a download.log
-gunzip all.fna.tar.gz
-gunzip all.gff.tar.gz
+tar -xf all.fna.tar.gz
+tar -xf all.gff.tar.gz

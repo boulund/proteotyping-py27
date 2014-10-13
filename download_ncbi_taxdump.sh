@@ -10,5 +10,5 @@ wget ftp://ftp.ncbi.nih.gov/pub/taxonomy/taxdump_readme.txt | tee -a download_ta
 wget ftp://ftp.ncbi.nih.gov/pub/taxonomy/taxdump.tar.gz | tee -a download_taxdump.log
 wget ftp://ftp.ncbi.nih.gov/pub/taxonomy/gi_taxid.readme | tee -a download_taxdump.log
 wget ftp://ftp.ncbi.nih.gov/pub/taxonomy/gi_taxid_nucl.dmp.gz | tee -a download_taxdump.log
-gunzip taxdump.tar.gz | tee -a download_taxdump.log
-gunzip gi_taxid_nucl.dmp | tee -a download_taxdump.log
+tar -xf taxdump.tar.gz | tee -a download_taxdump.log
+gunzip gi_taxid_nucl.dmp.gz | tee -a download_taxdump.log
