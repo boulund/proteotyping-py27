@@ -178,17 +178,17 @@ def filter_hits(hits, remove_noninformative, identity, best_hits_only, matches, 
                 continue
 
         # Filter hits based on user critera
-        hitlist.sort(key=lambda hit: hit.matches, reverse=True)
-        hitlist = [hit for hit in hitlist if hit.matches >= matches]
         filtered_hitlist = []
         for hit in hitlist:
             if hit.identity >= identity and hit.matches >= matches and hit.mismatches <= mismatches:
                 filtered_hitlist.append(hit)
         if len(filtered_hitlist)>0:
+            filtered_hitlist.sort(key=lambda hit: hit.matches, reverse=True) # Just nice to have it sorted
             filtered_hits[fragment_id] = filtered_hitlist
 
     logging.info("Filtered {} fragments. {} fragments with {} hits remain.".format(len(hits)-len(filtered_hits), 
         len(filtered_hits), len([hit for hit in filtered_hits.itervalues()])))
+
 
     return filtered_hits
 
@@ -203,9 +203,9 @@ def insert_hits_into_tree(tree, hits):
         for hit in hitlist:
             accnos_set.add(hit.target_accno)
             try:
-                count_per_accno[hit.target_accno] += len(hits[fragment_id])
+                count_per_accno[hit.target_accno] += 1
             except KeyError:
-                count_per_accno[hit.target_accno] = len(hits[fragment_id])
+                count_per_accno[hit.target_accno] = 1
     for node in tree.traverse():
         for accno in node.accno:
             if accno in accnos_set:
@@ -282,6 +282,7 @@ def main(filename, options):
             options.max_mismatches,
             options.best_hits_only)
     totalhits = sum(map(len, [hits for hits in filtered_hits.itervalues()]))
+    print len([hit for hit in filtered_hits.itervalues()])
     insert_hits_into_tree(tree, filtered_hits)
     sum_up_the_tree(tree)
 
