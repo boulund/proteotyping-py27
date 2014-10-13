@@ -63,8 +63,12 @@ def load_ncbi_tree_from_taxdump(dumpdir, taxid_gi_accno_pickle, rebase=0):
         #"teleomorph", "type material"])
 
     logging.debug("Loading taxid:gi:accno mappings...")
-    with open(taxid_gi_accno_pickle, 'rb') as pickled:
-        taxid2gi_accno = cPickle.load(pickled)
+    try:
+        with open(taxid_gi_accno_pickle, 'rb') as pickled:
+            taxid2gi_accno = cPickle.load(pickled)
+    except IOError:
+        logging.error("Couldn't load '{}'. Have you run prepare_taxdump_refseq.py?".format(taxid_gi_accno_pickle))
+        exit()
     logging.debug("{:>10} taxid:gi:accno mappings loaded.".format(len(taxid2gi_accno)))
 
     parent2child = {}

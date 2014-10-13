@@ -271,6 +271,15 @@ def load_taxtree(taxtree_pickle, taxdumpdir, id_gi_accno_pickle, rebase):
     return tree
 
 
+def annotate_hits(hits, annotation_file, gene_info):
+    """Annotates hits to determine what genes were hit.
+    """
+
+    #for hitlist in hits.itervalues():
+    pass
+        
+
+
 def main(filename, options):
     """Main function that runs the complete pipeline logic.
     """
@@ -287,8 +296,8 @@ def main(filename, options):
 
     print "-"*68
     print "Results at {} level for file {}.".format(options.taxonomic_rank, filename)
-    print "Total hits: {}".format(totalhits)
     print_top_n_hits(tree, options.taxonomic_rank, totalhits, n=options.display, walk=options.walk)
+    print " Total: {:<}".format(totalhits)
 
 
 
