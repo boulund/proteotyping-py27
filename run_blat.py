@@ -75,3 +75,5 @@ if __name__ == "__main__":
         num_workers = len(options.FASTA)
 
     logging.debug("Creating pool of {} workers.".format(num_workers))
+    pool = Pool(processes=num_workers)
+    result = pool.map(parallel_run_blat, options.FASTA)
