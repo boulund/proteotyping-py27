@@ -51,15 +51,21 @@ def parse_commandline(argv):
             choices=["no rank", "subspecies", "species", "genus", "family", "order", "class", "phylum", "superkingdom"],
             default="species",
             help="Set the taxonomic level on which hits are grouped [%(default)s].")
+    parser.add_argument("--fragment_length", dest="fragment_length", metavar="L", type=int,
+            default=6,
+            help="Minimum fragment length [%(default)s].")
+    parser.add_argument("-i", "--identity", dest="identity", metavar="I", type=float,
+            default=90,
+            help="Filter out hits with less than or equal to this percentage identity [%(default)s].")
+    parser.add_argument("--fragment_coverage", dest="fragment_coverage", metavar="C", type=float,
+            default=1,
+            help="Amount of fragment covered in alignment [%(default)s].")
     parser.add_argument("-m", "--min_matches", dest="min_matches", metavar="m", type=int,
             default=15, #0
             help="Filter out hits with less than this  number of matches [%(default)s].")
     parser.add_argument("-M", "--max_mismatches", dest="max_mismatches", metavar="M", type=int,
             default=0, #100, #sys.maxint,
             help="Filter out hits with more than or equal to this number of mismatches [%(default)s].")
-    parser.add_argument("-i", "--identity", dest="identity", metavar="I", type=float,
-            default=90,
-            help="Filter out hits with less than or equal to this percentage identity [%(default)s].")
     parser.add_argument("--remove_noninformative", dest="remove_noninformative", action="store_false",
             default=True, # TODO: This is unintuitive: reverse wording
             help="Remove fragments that match to more than one entity at the specific taxonomic level [%(default)s].")
@@ -125,7 +131,8 @@ def parse_blat_output(filename, file_format="blast8"):
     target_accno, identity, mathes, mismatches, score.
     """
 
-    Hit = namedtuple("Hit", ["target_accno", "identity", "matches", "mismatches", "score", "startpos", "endpos"])
+    Hit = namedtuple("Hit", ["target_accno", 
+        "identity", "matches", "mismatches", "score", "startpos", "endpos", "fragment_length", "fragment_coverage"])
     hit_counter = 0
     hits = {}
 
@@ -141,7 +148,9 @@ def parse_blat_output(filename, file_format="blast8"):
                 mismatches = int(blast8_line[4])
                 startpos = int(blast8_line[8])
                 endpos = int(blast8_line[9])
-                hit = Hit(target_accno, identity, matches, mismatches, 0, startpos, endpos)
+                fragment_length = int(fragment_id.split("_")[1])
+                fragment_coverage = matches/fragment_length
+                hit = Hit(target_accno, identity, matches, mismatches, 0, startpos, endpos, fragment_length, fragment_coverage)
                 try:
                     hits[fragment_id].append(hit)
                 except KeyError:
@@ -177,7 +186,7 @@ def parse_blat_output(filename, file_format="blast8"):
 
 
 
-def filter_hits(hits, remove_noninformative, identity, best_hits_only, matches, mismatches):
+def filter_hits(hits, options): #remove_noninformative, identity, best_hits_only, matches, mismatches):
     """Filter hits based on user critera.
     """
 
@@ -186,18 +195,24 @@ def filter_hits(hits, remove_noninformative, identity, best_hits_only, matches, 
         startlen = len(hitlist)
 
         # Remove non-informative fragments
-        if remove_noninformative:
-            if startlen == 1:
-                pass
-            else:
+        if options.remove_noninformative:
+            if not startlen == 1:
                 logging.debug("Fragment '{}' had {} hits and was removed.".format(fragment_id, startlen))
                 continue
 
         # Filter hits based on user critera
         filtered_hitlist = []
         for hit in hitlist:
-            if hit.identity >= identity and hit.matches >= matches and hit.mismatches <= mismatches:
-                filtered_hitlist.append(hit)
+            logging.debug("About to filter {}.".format(hit))
+            if hit.identity >= options.identity:
+                logging.debug("  Passed identity.")
+                if hit.fragment_length >= options.fragment_length:
+                    logging.debug("  Passed fragment length.")
+                    if hit.fragment_coverage >= options.fragment_coverage:
+                        logging.debug("  Passed fragment coverage.")
+                        filtered_hitlist.append(hit)
+            #if hit.identity >= options.identity and hit.matches >= matches and hit.mismatches <= mismatches:
+                #filtered_hitlist.append(hit)
         if len(filtered_hitlist)>0:
             filtered_hitlist.sort(key=lambda hit: hit.matches, reverse=True) # Just nice to have it sorted
             filtered_hits[fragment_id] = filtered_hitlist
@@ -306,12 +321,11 @@ def load_gene_info(gene_info_file):
 
 
 
-def count_annotation_hits(hits, annotation_pickle):
+def count_annotation_hits(hits, annotation):
     """Annotates hits to determine what genes were hit.
     """
 
-    with open(annotation_pickle, 'rb') as pkl:
-        annotation = cPickle.load(pkl)
+    missing_annotation = set()
 
     gene_counts = {}
     for hitlist in hits.itervalues():
@@ -326,9 +340,11 @@ def count_annotation_hits(hits, annotation_pickle):
                             except KeyError:
                                 gene_counts[annot.geneID] = 1
             except KeyError:
-                pass
-                logging.warning("Found hits to {} but can't find annotation.".format(accno))
+                missing_annotation.add(accno)
+                #logging.warning("Found hits to {} but can't find annotation.".format(accno))
 
+    if missing_annotation:
+        logging.warning("Couldn't find annotation for:\n{}.".format("\n".join(missing_annotation)))
     return gene_counts
 
 
@@ -352,17 +368,28 @@ def print_gene_counts(gene_counts, gene_info, maxprint=50, sort=True):
     print "Printed {} out of {} hit annotated regions.".format(printcounter, len(counts))
 
 
+
+def load_annotation(annotation_pickle):
+    """Loads annotation from previously prepared gff info pickle.
+    """
+
+    with open(annotation_pickle, 'rb') as pkl:
+        annotation = cPickle.load(pkl)
+    return annotation
+
+
+
 def main(filename, options):
     """Main function that runs the complete pipeline logic.
     """
     hits = parse_blat_output(filename, options.file_format)
-    filtered_hits = filter_hits(hits, 
-            options.remove_noninformative,
-            options.identity,
-            options.min_matches,
-            options.max_mismatches,
-            options.best_hits_only)
+
+    filtered_hits = filter_hits(hits, options)
+    if logging.getLogger().getEffectiveLevel < 20:
+        for fragment, hitlist in filtered_hits.iteritems():
+            logging.debug("All filtered hits:\n{}".format(hitlist))
     totalhits = sum(map(len, [hits for hits in filtered_hits.itervalues()]))
+
     insert_hits_into_tree(tree, filtered_hits)
     sum_up_the_tree(tree)
 
@@ -371,7 +398,6 @@ def main(filename, options):
     print_top_n_hits(tree, options.taxonomic_rank, totalhits, n=options.display, walk=options.walk)
     print " Total: {:<}".format(totalhits)
 
-    gene_info = load_gene_info(options.gene_info_file)
     print "-"*68
     if options.print_all_hit_annotations:
         gene_counts = count_annotation_hits(hits, options.accno_annotation_pickle)
@@ -385,12 +411,13 @@ def main(filename, options):
 
 
 if __name__ == "__main__":
-    
+
     options = parse_commandline(argv)
 
-    # Load taxtree
-    tree = load_taxtree(options.taxtree_pickle, 
-            options.taxdumpdir, options.id_gi_accno_pickle, options.rebase_tree)
+    tree = load_taxtree(options.taxtree_pickle, options.taxdumpdir, 
+            options.id_gi_accno_pickle, options.rebase_tree)
+    gene_info = load_gene_info(options.gene_info_file)
+    annotation = load_annotation(options.accno_annotation_pickle)
 
     for filename in options.FILE:
         main(filename, options)
