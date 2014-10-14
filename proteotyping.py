@@ -82,10 +82,6 @@ def parse_commandline(argv):
     devoptions.add_argument("--best_hits_only", dest="best_hits_only", action="store_true",
             default=False,
             help="For each fragment, remove hits that have less than the maximum number of matches and more than the minimum number of mismatches. [%(default)s].")
-    devoptions.add_argument("--file_format", dest="file_format", 
-            choices=["blast8","psl"],
-            default="blast8",
-            help="Specify format of mappings file from blat [%(default)s].")
     devoptions.add_argument("--walk", dest="walk", action="store_true",
             default=False,
             help="Instead of only visiting 'leaf' nodes when printing, walk the entire distance from the root node down [%(default)s].")
@@ -122,63 +118,37 @@ def parse_accno(s, group=1):
 
 
 
-def parse_blat_output(filename, file_format="blast8"):
+def parse_blat_output(filename):
     """Parses blat output. Returns all hits for each fragment.
 
     A hit is a named tuple with the following fields:
     target_accno, identity, mathes, mismatches, score.
     """
 
-    Hit = namedtuple("Hit", ["target_accno", 
-        "identity", "matches", "mismatches", "score", "startpos", "endpos", "fragment_length", "fragment_coverage"])
+    Hit = namedtuple("Hit", ["target_accno", "identity", "matches", "mismatches", 
+        "score", "startpos", "endpos", "fragment_length", "fragment_coverage"])
     hit_counter = 0
     hits = {}
 
-    if file_format == "blast8":
-        with open(filename) as blast8:
-            counter = 0
-            for line in blast8:
-                blast8_line = line.split()
-                fragment_id = blast8_line[0]
-                target_accno = parse_accno(blast8_line[1])
-                identity = float(blast8_line[2])
-                matches = int(blast8_line[3])
-                mismatches = int(blast8_line[4])
-                startpos = int(blast8_line[8])
-                endpos = int(blast8_line[9])
-                fragment_length = int(fragment_id.split("_")[1])
-                fragment_coverage = matches/fragment_length
-                hit = Hit(target_accno, identity, matches, mismatches, 0, startpos, endpos, fragment_length, fragment_coverage)
-                try:
-                    hits[fragment_id].append(hit)
-                except KeyError:
-                    hits[fragment_id] = [hit]
-                hit_counter += 1
-    elif file_format == "psl":
-        logging.warning("BLAT psl format not completely supported. Identity not computed.") # TODO: compute identity
-        with open(filename) as f:
-            line = f.readline()
-            if not line.startswith("psLayout"):
-                logging.error("File '{}' not blat output format?".format(filename))
-                exit()
-            else:
-                [f.readline() for x in range(0,4)] # Skip past column headers
-
-            hits = {}
-            for line in f:
-                split_line = line.split()
-                matches, mismatches, repmatches = [int(info) for info in split_line[0:3]]
-                ncount, qinserts, qbaseinserts, tinserts, tbaseinserts = split_line[3:8]
-                fragment_id = split_line[9]
-                target_accno = parse_accno(split_line[13], group=1)
-                hit = Hit(target_accno, -1, matches, mismatches, 0, 0, 0) # TODO: compute identity, startpos, endpos
-                try:
-                    hits[fragment_id].append(hit)
-                except KeyError:
-                    hits[fragment_id] = [hit]
-    else:
-        logging.error("Don't know what to do with file format '{}'.".format(file_format))
-        exit()
+    with open(filename) as blast8:
+        counter = 0
+        for line in blast8:
+            blast8_line = line.split()
+            fragment_id = blast8_line[0]
+            target_accno = parse_accno(blast8_line[1])
+            identity = float(blast8_line[2])
+            matches = int(blast8_line[3])
+            mismatches = int(blast8_line[4])
+            startpos = int(blast8_line[8])
+            endpos = int(blast8_line[9])
+            fragment_length = int(fragment_id.split("_")[1])
+            fragment_coverage = matches/fragment_length
+            hit = Hit(target_accno, identity, matches, mismatches, 0, startpos, endpos, fragment_length, fragment_coverage)
+            try:
+                hits[fragment_id].append(hit)
+            except KeyError:
+                hits[fragment_id] = [hit]
+            hit_counter += 1
     logging.info("Parsed {} hits for {} fragments.".format(hit_counter, len(hits)))
     return hits
 
@@ -434,7 +404,7 @@ Input: """.format(options.fragment_length, options.fragment_coverage, options.id
 def main(filename, options):
     """Main function that runs the complete pipeline logic.
     """
-    hits = parse_blat_output(filename, options.file_format)
+    hits = parse_blat_output(filename)
 
     filtered_hits = filter_hits(hits, options)
     if logging.getLogger().getEffectiveLevel < 20:
