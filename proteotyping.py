@@ -31,7 +31,7 @@ def parse_commandline(argv):
             default=10,
             help="Number of results to display [%(default)s].")
     parser.add_argument("--taxdumpdir", dest="taxdumpdir", metavar="DIR",
-            default="/shared/db/NCBI/taxonomy/taxdump",
+            default="/shared/db/NCBI/taxonomy/taxdump/",
             help="Path to NCBI Taxonomy dump folder (must contain 'names.dmp', 'nodes.dmp' [%(default)s].")
     parser.add_argument("--id_gi_accno_pickle", dest="id_gi_accno_pickle", metavar="FILE",
             default="id_gi_accno.pkl",
@@ -143,7 +143,8 @@ def parse_blat_output(filename):
             endpos = int(blast8_line[9])
             fragment_length = int(fragment_id.split("_")[1])
             fragment_coverage = matches/fragment_length
-            hit = Hit(target_accno, identity, matches, mismatches, 0, startpos, endpos, fragment_length, fragment_coverage)
+            hit = Hit(target_accno, identity, matches, mismatches, 
+                    0, startpos, endpos, fragment_length, fragment_coverage)
             try:
                 hits[fragment_id].append(hit)
             except KeyError:
@@ -154,7 +155,7 @@ def parse_blat_output(filename):
 
 
 
-def filter_hits(hits, options): #remove_noninformative, identity, best_hits_only, matches, mismatches):
+def filter_hits(hits, options): 
     """Filter hits based on user critera.
     """
 
@@ -355,42 +356,42 @@ def wait_for_user_input(options):
     """
 
     instructions = """
-Ran with options: l: {}, c: {}, i: {}, r: {}
+Ran with options: l: {}, c: {:2.2f}, i: {}, r: {}
 Enter options to change filtering criteria and run again:
  fragment (l)ength, (i)dentity, fragment (c)overage, (r)emove noninformative.
  Some options can be combined with numbers, e.g. 'l 10' changes the filtering length to 10.
+ Separate multiple options with ','.
  Type 'q' and press enter to quit.
 Input: """.format(options.fragment_length, options.fragment_coverage, options.identity, options.remove_noninformative)
     try:
         user_input = raw_input(instructions)
-        if user_input == "":
-            return options
-        elif user_input.lower().startswith("l"):
-            try:
-                options.fragment_length = int(input.split()[1])
-            except ValueError:
-                print "ERROR: Cannot parse max number of listings. Type e.g. 'n 4' to print the first 4 listings.'"
+        for param in [a.strip() for a in user_input.split(",")]:
+            if param.lower().startswith("l"):
+                try:
+                    options.fragment_length = int(param.split()[1])
+                except ValueError:
+                    print "ERROR: Cannot parse fragment length Try again."
+                    return wait_for_user_input(options)
+            elif param.lower().startswith("i"):
+                try:
+                    options.identity = float(param.split()[1])
+                except ValueError:
+                    print "ERROR: Cannot parse identity. Try again."
+                    return wait_for_user_input(options)
+            elif param.lower().startswith("c"):
+                try:
+                    options.fragment_coverage = float(param.split()[1])
+                except ValueError:
+                    print "ERROR: Cannot parse fragment coverage. Try again."
+                    return wait_for_user_input(options)
+            elif param.lower().startswith("r"):
+                options.remove_noninformative = not options.remove_noninformative
+            elif param.lower().startswith("q"):
+                print "User exited."
+                exit()
+            else:
+                print "ERROR: Option not recognized, try again."
                 return wait_for_user_input(options)
-        elif user_input.lower().startswith("i"):
-            try:
-                options.identity = float(input.split()[1])
-            except ValueError:
-                print "ERROR: Cannot parse max number of listings. Type e.g. 'n 4' to print the first 4 listings.'"
-                return wait_for_user_input(options)
-        elif user_input.lower().startswith("c"):
-            try:
-                options.fragment_coverage = float(input.split()[1])
-            except ValueError:
-                print "ERROR: Cannot parse max number of listings. Type e.g. 'n 4' to print the first 4 listings.'"
-                return wait_for_user_input(options)
-        elif user_input.lower().startswith("r"):
-            options.remove_noninformative = not options.remove_noninformative
-        elif user_input.lower().startswith("q"):
-            print "User exited."
-            exit()
-        else:
-            print "ERROR: Option not recognized, try again or press Enter to run again with same settings."
-            return wait_for_user_input(options)
         return options
     except KeyboardInterrupt:
         print "\nUser exited through Ctrl+C."

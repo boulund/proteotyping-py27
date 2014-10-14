@@ -15,7 +15,7 @@ def parse_commandline():
     """Parses commandline.
     """
 
-    desc="""Conveience wrapper for running multiple blat instances in parallel. Fredrik Boulund 2014."""
+    desc="""Convenience wrapper for running multiple BLAT instances in parallel. Fredrik Boulund 2014."""
 
     parser = argparse.ArgumentParser(description=desc)
 
@@ -28,7 +28,7 @@ def parse_commandline():
             specified on the command line, make sure to put them last in the
             command line!""")
     parser.add_argument("--blat_options", metavar="'S'", dest="blat_options",
-            default="-out=blast8 -t=dnax -q=prot",
+            default="-out=blast8 -t=dnax -q=prot -stepSize=1 -tileSize=3 -minMatch=1 -fine",
             help="String of options to send to blat ['%(default)s'].")
     parser.add_argument("-N", dest="N", metavar="N", type=int,
             default=10,

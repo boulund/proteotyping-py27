@@ -44,8 +44,8 @@ def load_ncbi_tree_from_taxdump(dumpdir, taxid_gi_accno_pickle, rebase=0, return
       https://github.com/jhcepas/ncbi_taxonomy/blob/master/update_taxadb.py
     """
 
-    namesdump = dumpdir+"names.dmp"
-    nodesdump = dumpdir+"nodes.dmp"
+    namesdump = dumpdir+"/names.dmp"
+    nodesdump = dumpdir+"/nodes.dmp"
     if not os.path.isfile(namesdump):
         raise Exception("Taxdump file {} not found.".format(namesdump))
     if not os.path.isfile(nodesdump):
