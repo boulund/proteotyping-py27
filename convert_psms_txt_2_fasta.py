@@ -88,7 +88,7 @@ def convert_psms_to_fasta(psms, outdir, remove_duplicates=False, confidence_leve
                 ambiguity = hitinfo[5]
                 if confidence in confidence_level and ambiguity in psm_ambiguity:
                     logging.debug("Writing {} with {} and {}.".format(sequence, confidence, ambiguity))
-                    fastafile.write("{}\n{}\n".format(">{}".format(num), sequence))
+                    fastafile.write("{}\n{}\n".format(">{}_{}".format(num,len(sequence)), sequence))
                     write_counter += 1
     logging.info("Wrote {} sequences to {}.".format(write_counter, outfilename))
 
