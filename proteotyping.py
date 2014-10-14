@@ -8,6 +8,7 @@ from __future__ import division
 from sys import argv, exit
 from collections import namedtuple
 from numpy import cumsum
+import copy
 import operator
 import cPickle
 import os
@@ -69,6 +70,9 @@ def parse_commandline(argv):
     parser.add_argument("--print_all_hit_annotations", dest="print_all_hit_annotations", action="store_true",
             default=False,
             help="Print a listing of all hit annotations (and not only hits from filtered peptide fragments) [%(default)s].")
+    parser.add_argument("--interactive", dest="interactive", action="store_true",
+            default=False,
+            help="Load all heavy stuff and then run interactively [%(default)s].")
 
 
     devoptions = parser.add_argument_group("Developer options", "Voids warranty ;)")
@@ -250,6 +254,13 @@ def sum_up_the_tree(tree):
             parent.count += leaf.count
 
 
+def reset_tree(tree):
+    """Resets counts on all nodes for use in interactive mode.
+    """
+    for node in tree.traverse():
+        node.count = 0
+
+
 def print_top_n_hits(tree, taxonomic_rank, totalhits, n=10, walk=False):
     """Prints the top 'n' nodes with the highest counts (and thus percentages).
     """
@@ -332,7 +343,6 @@ def count_annotation_hits(hits, annotation):
                                 gene_counts[annot.geneID] = 1
             except KeyError:
                 missing_annotation.add(accno)
-                #logging.warning("Found hits to {} but can't find annotation.".format(accno))
 
     if missing_annotation:
         logging.warning("Couldn't find annotation for:\n{}.".format("\n".join(missing_annotation)))
@@ -370,6 +380,57 @@ def load_annotation(annotation_pickle):
 
 
 
+def wait_for_user_input(options):
+    """Read input from terminal.
+    """
+
+    instructions = """
+Ran with options: l: {}, c: {}, i: {}, r: {}
+Enter options to change filtering criteria and run again:
+ fragment (l)ength, (i)dentity, fragment (c)overage, (r)emove noninformative.
+ Some options can be combined with numbers, e.g. 'l 10' changes the filtering length to 10.
+ Type 'q' and press enter to quit.
+Input: """.format(options.fragment_length, options.fragment_coverage, options.identity, options.remove_noninformative)
+    try:
+        user_input = raw_input(instructions)
+        if user_input == "":
+            return options
+        elif user_input.lower().startswith("l"):
+            try:
+                options.fragment_length = int(input.split()[1])
+            except ValueError:
+                print "ERROR: Cannot parse max number of listings. Type e.g. 'n 4' to print the first 4 listings.'"
+                return wait_for_user_input(options)
+        elif user_input.lower().startswith("i"):
+            try:
+                options.identity = float(input.split()[1])
+            except ValueError:
+                print "ERROR: Cannot parse max number of listings. Type e.g. 'n 4' to print the first 4 listings.'"
+                return wait_for_user_input(options)
+        elif user_input.lower().startswith("c"):
+            try:
+                options.fragment_coverage = float(input.split()[1])
+            except ValueError:
+                print "ERROR: Cannot parse max number of listings. Type e.g. 'n 4' to print the first 4 listings.'"
+                return wait_for_user_input(options)
+        elif user_input.lower().startswith("r"):
+            options.remove_noninformative = not options.remove_noninformative
+        elif user_input.lower().startswith("q"):
+            print "User exited."
+            exit()
+        else:
+            print "ERROR: Option not recognized, try again or press Enter to run again with same settings."
+            return wait_for_user_input(options)
+        return options
+    except KeyboardInterrupt:
+        print "\nUser exited through Ctrl+C."
+        exit()
+    except EOFError:
+        print "\nUser exited through Ctrl+D."
+        exit()
+
+
+
 def main(filename, options):
     """Main function that runs the complete pipeline logic.
     """
@@ -391,11 +452,11 @@ def main(filename, options):
 
     print "-"*68
     if options.print_all_hit_annotations:
-        gene_counts = count_annotation_hits(hits, options.accno_annotation_pickle)
+        gene_counts = count_annotation_hits(hits, annotation)
         print "All hit annotated regions:"
         print_gene_counts(gene_counts, gene_info, options.maxprint)
     else:
-        gene_counts = count_annotation_hits(filtered_hits, options.accno_annotation_pickle)
+        gene_counts = count_annotation_hits(filtered_hits, annotation)
         print "Annotated regions hit by filtered fragments:"
         print_gene_counts(gene_counts, gene_info, options.maxprint)
 
@@ -410,5 +471,12 @@ if __name__ == "__main__":
     gene_info = load_gene_info(options.gene_info_file)
     annotation = load_annotation(options.accno_annotation_pickle)
 
-    for filename in options.FILE:
-        main(filename, options)
+    if options.interactive:
+        while True:
+            reset_tree(tree)
+            for filename in options.FILE:
+                main(filename, options)
+            options = wait_for_user_input(options)
+    else:
+        for filename in options.FILE:
+            main(filename, options)
