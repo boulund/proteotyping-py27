@@ -60,12 +60,6 @@ def parse_commandline(argv):
     parser.add_argument("--fragment_coverage", dest="fragment_coverage", metavar="C", type=float,
             default=1,
             help="Amount of fragment covered in alignment [%(default)s].")
-    parser.add_argument("-m", "--min_matches", dest="min_matches", metavar="m", type=int,
-            default=15, #0
-            help="Filter out hits with less than this  number of matches [%(default)s].")
-    parser.add_argument("-M", "--max_mismatches", dest="max_mismatches", metavar="M", type=int,
-            default=0, #100, #sys.maxint,
-            help="Filter out hits with more than or equal to this number of mismatches [%(default)s].")
     parser.add_argument("--remove_noninformative", dest="remove_noninformative", action="store_false",
             default=True, # TODO: This is unintuitive: reverse wording
             help="Remove fragments that match to more than one entity at the specific taxonomic level [%(default)s].")
@@ -211,15 +205,12 @@ def filter_hits(hits, options): #remove_noninformative, identity, best_hits_only
                     if hit.fragment_coverage >= options.fragment_coverage:
                         logging.debug("  Passed fragment coverage.")
                         filtered_hitlist.append(hit)
-            #if hit.identity >= options.identity and hit.matches >= matches and hit.mismatches <= mismatches:
-                #filtered_hitlist.append(hit)
         if len(filtered_hitlist)>0:
             filtered_hitlist.sort(key=lambda hit: hit.matches, reverse=True) # Just nice to have it sorted
             filtered_hits[fragment_id] = filtered_hitlist
 
     logging.info("Filtered {} fragments. {} fragments with {} hits remain.".format(len(hits)-len(filtered_hits), 
         len(filtered_hits), sum(map(len, [hits for hits in filtered_hits.itervalues()]))))
-
 
     return filtered_hits
 
