@@ -408,9 +408,9 @@ def main(filename, options):
     hits = parse_blat_output(filename)
 
     filtered_hits = filter_hits(hits, options)
-    if logging.getLogger().getEffectiveLevel < 20:
+    if logging.getLogger().getEffectiveLevel() < 20:
         for fragment, hitlist in filtered_hits.iteritems():
-            logging.debug("All filtered hits:\n{}".format(hitlist))
+            logging.debug("All filtered hits:\n{} {}".format(fragment, hitlist))
     totalhits = sum(map(len, [hits for hits in filtered_hits.itervalues()]))
 
     insert_hits_into_tree(tree, filtered_hits)
