@@ -6,3 +6,5 @@ src
 *.pyc
 *.pkl
 *.blast8
+.shastore
+output*
