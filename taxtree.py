@@ -165,6 +165,24 @@ def search_for_accno(tree, accno):
         raise Exception("Can't search for {} of type {}.".format(accno, type(accno)))
 
 
+def search_for_nodes(tree, return_node_fn=None, strategy="levelorder"):
+    """Searches a tree for nodes that return True to the return_node_fn.
+
+    return_node_fn must be specified, will return None otherwise.
+    Example: return_node_fn=lambda n: n.count>0
+    """
+
+    if return_node_fn is None:
+        return None
+    
+    found_nodes = []
+    for n in tree.traverse(strategy=strategy):
+        if return_node_fn(n):
+            found_nodes.append(n)
+
+    return found_nodes
+
+
 if __name__ == "__main__":
     # Some prototype and debugging code...
     logging.basicConfig(level=logging.DEBUG)

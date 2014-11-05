@@ -7,8 +7,6 @@
 from __future__ import division
 from sys import argv, exit
 from collections import namedtuple
-from numpy import cumsum
-import copy
 import operator
 import cPickle
 import os
@@ -16,8 +14,6 @@ import taxtree
 import argparse
 import logging
 import re
-
-from prepare_taxdump_refseq import find_files, Annotation
 
 def parse_commandline(argv):
     """Parse commandline arguments"""
@@ -131,7 +127,6 @@ def parse_blat_output(filename):
     hits = {}
 
     with open(filename) as blast8:
-        counter = 0
         for line in blast8:
             blast8_line = line.split()
             fragment_id = blast8_line[0]
@@ -219,8 +214,6 @@ def sum_up_the_tree(tree):
     for leaf in tree.get_leaves(): #(is_leaf_fn=lambda n: n.count > 0):
         lineage = leaf.get_ancestors()
         lineage.insert(0, leaf)
-        counts_per_node = [n.count for n in lineage]
-        cumulative_counts = list(cumsum(counts_per_node))
         for idx, parent in enumerate(lineage[1:]):
             parent.count += leaf.count
 
