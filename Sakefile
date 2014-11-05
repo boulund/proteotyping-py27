@@ -1,0 +1,40 @@
+# Fredrik Boulund 2014
+# Sakefile for proteotyping project
+# Macros:
+#! MAPFILE=EU122_QE_140828_57-01_All_psms.blast8
+#! MAPDIR=/home/boulund/research/TTT/results/refseq_20141007/mappings
+#! OUTDIR=output
+
+
+create outdir:
+    help: Create outdir for proteotyping results.
+    dependencies:
+    formula: >
+        mkdir -p $OUTDIR
+    output:
+        - $OUTDIR
+
+
+proteotype:
+    help: >
+        Run complete proteotyping pipeline,
+        using default settings.
+    dependencies:
+        - $OUTDIR
+        - accno_annotation.pkl
+        - id_gi_accno.pkl
+    formula: >
+        ./proteotyping.py $MAPDIR/$MAPFILE > $OUTDIR/$MAPFILE.txt
+    output:
+        - output_$MAPFILE.txt
+        - taxtree.pkl
+
+
+prepare taxdump:
+    help: Prepare some prequesite files from the NCBI taxdump
+    dependencies:
+    formula: >
+        ./prepare_taxdump_refseq.py /shared/db/NCBI/taxonomy/taxdump/gi_taxid_nucl.dmp /shared/genomes/NCBI/bacterial/20141007
+    output:
+        - id_gi_accno.pkl
+        - accno_annotation.pkl
