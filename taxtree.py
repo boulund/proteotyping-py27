@@ -74,7 +74,6 @@ def load_ncbi_tree_from_taxdump(dumpdir, taxid_gi_accno_pickle, rebase=0, return
     parent2child = {}
     name2node = {}
     node2taxname = {}
-    taxid2gi = {}
     synonyms = {}
     name2rank = {}
     logging.debug("Loading node names...")
@@ -98,7 +97,6 @@ def load_ncbi_tree_from_taxdump(dumpdir, taxid_gi_accno_pickle, rebase=0, return
     logging.debug("Loading nodes...")
     counter_inserted = 0
     with open(nodesdump) as f:
-        removals = 0
         for i, line in enumerate(f):
             if i%100000 == 0:
                 logging.debug("Processed {:>7} nodes".format(i))
