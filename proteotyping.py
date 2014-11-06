@@ -7,13 +7,16 @@
 from __future__ import division
 from sys import argv, exit
 from collections import namedtuple
+from multiprocessing import Pool
 import operator
 import cPickle
 import os
-import taxtree
 import argparse
 import logging
 import re
+
+from prepare_taxdump_refseq import find_files, Annotation
+import taxtree
 
 def parse_commandline(argv):
     """Parse commandline arguments"""
@@ -81,6 +84,9 @@ def parse_commandline(argv):
     devoptions.add_argument("--walk", dest="walk", action="store_true",
             default=False,
             help="Instead of only visiting 'leaf' nodes when printing, walk the entire distance from the root node down [%(default)s].")
+    devoptions.add_argument("--numCPUs", dest="numCPUs", type=int,
+            default=16,
+            help="Number of CPUs to utilize in parallel regions [%(default)s].")
 
     if len(argv) < 2:
         parser.print_help()
@@ -149,20 +155,64 @@ def parse_blat_output(filename):
     return hits
 
 
+def informative_fragment(hitlist, tree, taxonomic_rank):
+    """Return True if hitlist for a given fragment is considered informative.
 
-def filter_hits(hits, options): 
+    Searches the tree for the node corresponding to the first hit in the
+    hitlist, then finds the ancestor at the correct taxonomic rank and creates
+    a set of all nodes beneath that node to which all the remaining hits in the
+    list are compared. If a hit is not to a node in the set, the fragment is
+    not informative.
+
+    Returns True if fragment is informative (if hitlist only contains hits that
+    match beneath the same node of rank 'taxonomic_rank').
+    Returns False otherwise.
+    """
+    
+    rank_name = ""
+    if len(hitlist) > 0:
+        hit_node = taxtree.search_for_accno(tree, hitlist[0].target_accno)
+    else:
+        return False
+
+    if hit_node:
+        # TODO: Potential bug here, I assume only one hit_node in the list.
+        logging.debug("Found hit to node {}.".format(hit_node[0].name))
+        if hit_node[0].rank == taxonomic_rank:
+            ancestor = hit_node[0]
+        else:
+            ancestors = hit_node[0].get_ancestors()
+            try:
+                ancestor = [n for n in ancestors if n.rank == taxonomic_rank][0]
+            except:
+                logging.debug("Found no ancestor of correct rank")
+                return False
+        logging.debug("Found ancestor {} at rank '{}'.".format(ancestor.name, ancestor.rank))
+        child_nodes = []
+        for descendant in ancestor.get_descendants():
+            for accno in descendant.accno:
+                child_nodes.append(accno)
+        child_nodes = set(child_nodes)
+    else:
+        logging.debug("Couldn't find a node for hit {}.".format(hitlist[0]))
+        return False
+
+    for hit in hitlist:
+        if hit.target_accno not in child_nodes:
+            logging.debug("{} was not found in {}".format(hit.target_accno, child_nodes))
+            return False
+    logging.debug("All hits hit under the same taxonomic level, informative fragment!")
+    return True
+
+
+
+def filter_hits(hits, tree, options): 
     """Filter hits based on user critera.
     """
 
     filtered_hits = {}
     for fragment_id, hitlist in hits.iteritems():
         startlen = len(hitlist)
-
-        # Remove non-informative fragments
-        if options.remove_noninformative:
-            if not startlen == 1:
-                logging.debug("Fragment '{}' had {} hits and was removed.".format(fragment_id, startlen))
-                continue
 
         # Filter hits based on user critera
         filtered_hitlist = []
@@ -175,6 +225,14 @@ def filter_hits(hits, options):
                     if hit.fragment_coverage >= options.fragment_coverage:
                         logging.debug("  Passed fragment coverage.")
                         filtered_hitlist.append(hit)
+
+        # Remove non-informative fragments
+        if options.remove_noninformative:
+            if not informative_fragment(filtered_hitlist, tree, options.taxonomic_rank):
+                logging.debug("Fragment {} is not informative".format(fragment_id))
+                continue
+            logging.debug("Fragment {} is informative".format(fragment_id))
+
         if len(filtered_hitlist)>0:
             filtered_hitlist.sort(key=lambda hit: hit.matches, reverse=True) # Just nice to have it sorted
             filtered_hits[fragment_id] = filtered_hitlist
@@ -395,15 +453,17 @@ Input: """.format(options.fragment_length, options.fragment_coverage, options.id
 
 
 
-def main(filename, options):
+def main(filename, tree, options):
     """Main function that runs the complete pipeline logic.
     """
     hits = parse_blat_output(filename)
 
-    filtered_hits = filter_hits(hits, options)
+    filtered_hits = filter_hits(hits, tree, options)
     if logging.getLogger().getEffectiveLevel() < 20:
+        logging.debug("All filtered hits:")
         for fragment, hitlist in filtered_hits.iteritems():
-            logging.debug("All filtered hits:\n{} {}".format(fragment, hitlist))
+            for hit in hitlist:
+                logging.debug("  {} {}".format(fragment, hit))
     totalhits = sum(map(len, [hits for hits in filtered_hits.itervalues()]))
 
     insert_hits_into_tree(tree, filtered_hits)
@@ -439,8 +499,8 @@ if __name__ == "__main__":
         while True:
             reset_tree(tree)
             for filename in options.FILE:
-                main(filename, options)
+                main(filename, tree, options)
             options = wait_for_user_input(options)
     else:
         for filename in options.FILE:
-            main(filename, options)
+            main(filename, tree, options)
