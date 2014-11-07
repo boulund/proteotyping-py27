@@ -8,6 +8,7 @@ from __future__ import division
 from sys import argv, exit
 from collections import namedtuple
 from multiprocessing import Pool
+import time
 import operator
 import cPickle
 import os
@@ -84,6 +85,9 @@ def parse_commandline(argv):
     devoptions.add_argument("--loglevel", choices=["INFO", "DEBUG"],
             default="INFO", 
             help="Set logging level [%(default)s].")
+    devoptions.add_argument("--logfile", dest="logfile", 
+            default="proteotyping.log",
+            help="Filename for log output [%(default)s].")
     devoptions.add_argument("--best_hits_only", dest="best_hits_only", action="store_true",
             default=False,
             help="For each fragment, remove hits that have less than the maximum number of matches and more than the minimum number of mismatches. [%(default)s].")
@@ -99,7 +103,17 @@ def parse_commandline(argv):
         exit()
 
     options = parser.parse_args(argv[1:])
-    logging.basicConfig(level=options.loglevel)
+    logger = logging.getLogger()
+    logger.setLevel(options.loglevel)
+    fh = logging.FileHandler(options.logfile)
+    ch = logging.StreamHandler()
+    formatter = logging.Formatter("%(asctime)s %(levelname)s: %(message)s")
+    fh.setFormatter(formatter)
+    ch.setFormatter(formatter)
+    logger.addHandler(fh)
+    logger.addHandler(ch)
+
+    logging.info("----------========= LOGGING STARTED {} ========---------".format(time.strftime("%c")))
 
     return options
 
