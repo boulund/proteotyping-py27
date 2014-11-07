@@ -79,6 +79,9 @@ def parse_commandline(argv):
     parser.add_argument("--interactive", dest="interactive", action="store_true",
             default=False,
             help="Load all heavy stuff and then run interactively [%(default)s].")
+    parser.add_argument("--output", dest="output",
+            default="",
+            help="Write results to this filename [results/FILE.results].")
 
 
     devoptions = parser.add_argument_group("Developer options", "Voids warranty ;)")
@@ -107,9 +110,10 @@ def parse_commandline(argv):
     logger.setLevel(options.loglevel)
     fh = logging.FileHandler(options.logfile)
     ch = logging.StreamHandler()
-    formatter = logging.Formatter("%(asctime)s %(levelname)s: %(message)s")
-    fh.setFormatter(formatter)
-    ch.setFormatter(formatter)
+    file_formatter = logging.Formatter("%(asctime)s %(levelname)s: %(message)s")
+    console_formatter = logging.Formatter("%(levelname)s: %(message)s")
+    fh.setFormatter(file_formatter)
+    ch.setFormatter(console_formatter)
     logger.addHandler(fh)
     logger.addHandler(ch)
 
@@ -150,6 +154,7 @@ def parse_blat_output(filename):
     hit_counter = 0
     hits = {}
 
+    logging.info("Parsing hits from {}".format(filename))
     with open(filename) as blast8:
         for line in blast8:
             blast8_line = line.split()
@@ -266,7 +271,7 @@ def filter_hits(hits, tree, options):
     """
 
     filtered_hits = {}
-    logging.debug("Starting pool of {} workers.".format(options.numCPUs))
+    logging.debug("Starting pool of {} workers to filter hits.".format(options.numCPUs))
     pool = Pool(options.numCPUs)
     result_list = pool.map(filter_parallel, hits.items())
 
@@ -321,8 +326,10 @@ def reset_tree(tree):
         node.count = 0
 
 
-def print_top_n_hits(tree, taxonomic_rank, totalhits, n=10, walk=False):
-    """Prints the top 'n' nodes with the highest counts (and thus percentages).
+def write_top_n_hits(outfilehandle, tree, taxonomic_rank, totalhits, n=10, walk=False):
+    """Writes the top 'n' nodes with the highest counts (and thus percentages).
+
+    outfilehandle is an already opened filehandle.
     """
     nodes_to_print = []
     if walk:
@@ -339,12 +346,12 @@ def print_top_n_hits(tree, taxonomic_rank, totalhits, n=10, walk=False):
             N = num_nodes
         else:
             N = n
-        print "     %  #         TAXID       TAXNAME                         ACCNO(s)"  
+        outfilehandle.write("     %  #         TAXID       TAXNAME                         ACCNO(s)\n")
         for i in xrange(0,N):
             n = nodes_to_print[i]
-            print "{:>6.2f}  {:<8}  {:<10}  {:<30}  {:<}".format(100*n.count/float(totalhits), n.count, n.name, n.taxname, ";".join(n.accno))
+            outfilehandle.write("{:>6.2f}  {:<8}  {:<10}  {:<30}  {:<}\n".format(100*n.count/float(totalhits), n.count, n.name, n.taxname, ";".join(n.accno)))
     else:
-        print "Nothing filtered through at {} level.".format(taxonomic_rank)
+        outfilehandle.write("Nothing filtered through at {} level.".format(taxonomic_rank))
 
 
 def load_taxtree(taxtree_pickle, taxdumpdir, id_gi_accno_pickle, rebase):
@@ -409,24 +416,27 @@ def count_annotation_hits(hits, annotation):
     return gene_counts
 
 
-def print_gene_counts(gene_counts, gene_info, maxprint=50, sort=True):
+def write_gene_counts(outfilehandle, gene_counts, gene_info, maxprint=50, sort=True):
     """Prints counts of annotated regions with some gene info.
+
+    outfilehandle is an already opened filehandle.
     """
     if sort:
         counts = sorted(gene_counts.items(), key=operator.itemgetter(1), reverse=sort)
     printcounter = 0
-    print "geneID    #     Symbol             Description" 
+    
+    outfilehandle.write("geneID    #     Symbol             Description\n")
     for geneID, count in counts:
         if printcounter < maxprint:
             try:
                 symbol, desc = gene_info[geneID][0:2]
             except KeyError:
                 logging.warning("Couldn't find information for geneID {}.".format(geneID))
-            print "{:<9} {:<5} {:<18} {:<}".format(geneID, count, symbol, desc)
+            outfilehandle.write("{:<9} {:<5} {:<18} {:<}\n".format(geneID, count, symbol, desc))
             printcounter += 1
         else:
             break
-    print "Printed {} out of {} hit annotated regions.".format(printcounter, len(counts))
+    outfilehandle.write("Printed {} out of {} hit annotated regions.\n".format(printcounter, len(counts)))
 
 
 
@@ -490,37 +500,57 @@ Input: """.format(options.fragment_length, options.fragment_coverage, options.id
         exit()
 
 
+def write_results(filename, tree, hits, filtered_hits, totalhits, annotation, options):
+    """Write results to file.
+    """
+
+    if options.output:
+        outfilename = options.output
+    else:
+        sourcename = os.path.basename(filename)
+        if not (os.path.exists("results") and os.path.isdir("results")):
+            os.mkdir("results")
+        outfilename = "results/{}.results".format(os.path.splitext(os.path.basename(filename))[0])
+
+    logging.info("Writing results to {}".format(outfilename))
+    with open(outfilename, "w") as outfile:
+        outfile.write("Results at rank '{}' for file {}\n".format(options.taxonomic_rank, filename))
+        outfile.write("-"*70+"\n")
+        write_top_n_hits(outfile, tree, options.taxonomic_rank, totalhits, n=options.display, walk=options.walk)
+        outfile.write(" Total: {:<}\n".format(totalhits))
+
+        outfile.write("-"*70+"\n")
+        if options.print_all_hit_annotations:
+            gene_counts = count_annotation_hits(hits, annotation)
+            outfile.write("All hit annotated regions:\n")
+            write_gene_counts(outfile, gene_counts, gene_info, options.maxprint)
+        else:
+            gene_counts = count_annotation_hits(filtered_hits, annotation)
+            outfile.write("Annotated regions hit by filtered fragments:\n")
+            write_gene_counts(outfile, gene_counts, gene_info, options.maxprint)
+
+
 
 def main(filename, tree, options):
     """Main function that runs the complete pipeline logic.
     """
-    hits = parse_blat_output(filename)
 
+    hits = parse_blat_output(filename)
     filtered_hits = filter_hits(hits, tree, options)
+    totalhits = sum(map(len, [hits for hits in filtered_hits.itervalues()]))
+
     if logging.getLogger().getEffectiveLevel() < 20:
         logging.debug("All filtered hits:")
         for fragment, hitlist in filtered_hits.iteritems():
             for hit in hitlist:
                 logging.debug("  {} {}".format(fragment, hit))
-    totalhits = sum(map(len, [hits for hits in filtered_hits.itervalues()]))
 
     insert_hits_into_tree(tree, filtered_hits)
     sum_up_the_tree(tree)
 
-    print "-"*68
-    print "Results at {} level for file {}.".format(options.taxonomic_rank, filename)
-    print_top_n_hits(tree, options.taxonomic_rank, totalhits, n=options.display, walk=options.walk)
-    print " Total: {:<}".format(totalhits)
+    write_results(filename, tree, hits, filtered_hits, totalhits, annotation, options)
 
-    print "-"*68
-    if options.print_all_hit_annotations:
-        gene_counts = count_annotation_hits(hits, annotation)
-        print "All hit annotated regions:"
-        print_gene_counts(gene_counts, gene_info, options.maxprint)
-    else:
-        gene_counts = count_annotation_hits(filtered_hits, annotation)
-        print "Annotated regions hit by filtered fragments:"
-        print_gene_counts(gene_counts, gene_info, options.maxprint)
+    
 
 
 
