@@ -18,6 +18,12 @@ import re
 from prepare_taxdump_refseq import find_files, Annotation
 import taxtree
 
+
+# This needs to be defined at the top level for multiprocessing to work.
+Hit = namedtuple("Hit", ["target_accno", "identity", "matches", "mismatches", 
+    "score", "startpos", "endpos", "fragment_length", "fragment_coverage"])
+
+
 def parse_commandline(argv):
     """Parse commandline arguments"""
 
@@ -127,8 +133,6 @@ def parse_blat_output(filename):
     target_accno, identity, mathes, mismatches, score.
     """
 
-    Hit = namedtuple("Hit", ["target_accno", "identity", "matches", "mismatches", 
-        "score", "startpos", "endpos", "fragment_length", "fragment_coverage"])
     hit_counter = 0
     hits = {}
 
@@ -205,36 +209,56 @@ def informative_fragment(hitlist, tree, taxonomic_rank):
     return True
 
 
+def filter_parallel(fragment_hitlist):
+    """Filter hits in parallel using multiprocessing.
+    """
+
+    fragment_id, hitlist = fragment_hitlist
+
+    startlen = len(hitlist)
+
+    # Filter hits based on user critera
+    filtered_hitlist = []
+    for hit in hitlist:
+        logging.debug("About to filter {}.".format(hit))
+        if hit.identity >= options.identity:
+            logging.debug("  {} passed identity.".format(hit))
+            if hit.fragment_length >= options.fragment_length:
+                logging.debug("  {} passed fragment length.".format(hit))
+                if hit.fragment_coverage >= options.fragment_coverage:
+                    logging.debug("  {} passed fragment coverage.".format(hit))
+                    filtered_hitlist.append(hit)
+
+    # Remove non-informative fragments
+    if options.remove_noninformative:
+        if not informative_fragment(filtered_hitlist, tree, options.taxonomic_rank):
+            logging.debug("Fragment {} is not informative".format(fragment_id))
+            return 
+        logging.debug("Fragment {} is informative".format(fragment_id))
+
+    if len(filtered_hitlist)>0:
+        filtered_hitlist.sort(key=lambda hit: hit.matches, reverse=True) # Just nice to have it sorted
+
+    return (fragment_id, filtered_hitlist)
+
+    
+
+
+
+
 
 def filter_hits(hits, tree, options): 
     """Filter hits based on user critera.
     """
 
     filtered_hits = {}
-    for fragment_id, hitlist in hits.iteritems():
-        startlen = len(hitlist)
+    logging.debug("Starting pool of {} workers.".format(options.numCPUs))
+    pool = Pool(options.numCPUs)
+    result_list = pool.map(filter_parallel, hits.items())
 
-        # Filter hits based on user critera
-        filtered_hitlist = []
-        for hit in hitlist:
-            logging.debug("About to filter {}.".format(hit))
-            if hit.identity >= options.identity:
-                logging.debug("  Passed identity.")
-                if hit.fragment_length >= options.fragment_length:
-                    logging.debug("  Passed fragment length.")
-                    if hit.fragment_coverage >= options.fragment_coverage:
-                        logging.debug("  Passed fragment coverage.")
-                        filtered_hitlist.append(hit)
-
-        # Remove non-informative fragments
-        if options.remove_noninformative:
-            if not informative_fragment(filtered_hitlist, tree, options.taxonomic_rank):
-                logging.debug("Fragment {} is not informative".format(fragment_id))
-                continue
-            logging.debug("Fragment {} is informative".format(fragment_id))
-
-        if len(filtered_hitlist)>0:
-            filtered_hitlist.sort(key=lambda hit: hit.matches, reverse=True) # Just nice to have it sorted
+    for result in result_list:
+        if result is not None:
+            fragment_id, filtered_hitlist = result
             filtered_hits[fragment_id] = filtered_hitlist
 
     logging.info("Filtered {} fragments. {} fragments with {} hits remain.".format(len(hits)-len(filtered_hits), 
