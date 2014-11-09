@@ -572,3 +572,4 @@ if __name__ == "__main__":
     else:
         for filename in options.FILE:
             main(filename, tree, options)
+            reset_tree(tree)
