@@ -91,9 +91,6 @@ def parse_commandline(argv):
     devoptions.add_argument("--logfile", dest="logfile", 
             default="proteotyping.log",
             help="Filename for log output [%(default)s].")
-    devoptions.add_argument("--best_hits_only", dest="best_hits_only", action="store_true",
-            default=False,
-            help="For each fragment, remove hits that have less than the maximum number of matches and more than the minimum number of mismatches. [%(default)s].")
     devoptions.add_argument("--walk", dest="walk", action="store_true",
             default=False,
             help="Instead of only visiting 'leaf' nodes when printing, walk the entire distance from the root node down [%(default)s].")
