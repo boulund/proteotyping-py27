@@ -222,6 +222,8 @@ def informative_fragment(hitlist, tree, taxonomic_rank):
             logging.debug("{} was not found in {}".format(hit.target_accno, child_nodes))
             return False
     logging.debug("All hits hit under the same taxonomic level, informative fragment!")
+    logging.debug("Informative fragment hits to {}".format(hit_node[0].taxname))
+    logging.debug("  Informative hits to {}".format(" ".join([hit.target_accno for hit in hitlist])))
     return True
 
 
@@ -250,7 +252,10 @@ def filter_parallel(fragment_hitlist):
         if not informative_fragment(filtered_hitlist, tree, options.taxonomic_rank):
             logging.debug("Fragment {} is not informative".format(fragment_id))
             return 
-        logging.debug("Fragment {} is informative".format(fragment_id))
+        if logging.getLogger().getEffectiveLevel() < 20:
+            logging.debug("Fragment {} is informative with hits to:".format(fragment_id))
+            for hit in filtered_hitlist:
+                logging.debug("  {}".format(hit.target_accno))
 
     if len(filtered_hitlist)>0:
         filtered_hitlist.sort(key=lambda hit: hit.matches, reverse=True) # Just nice to have it sorted
