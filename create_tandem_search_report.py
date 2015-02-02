@@ -96,7 +96,7 @@ def create_tandem_output_report(xmlfile, outdir):
             reportfile.write("  Total: {}\n".format(group_counter))
 
         reportfile.write("\nTotal number of spectra: {}\n".format(totals[0]))
-    logging.info("Wrote {} for {} spectra to {}.".format(totals[0], totals[1], outfilename))
+    logging.info("Wrote {} peptides for {} spectra to {}.".format(totals[1], totals[0], outfilename))
 
 
 
