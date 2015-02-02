@@ -59,11 +59,9 @@ def create_tandem_output_report(xmlfile, outdir):
 
     outfilename = path.join(outdir, path.splitext(path.basename(xmlfile))[0]+"_report.txt")
     logging.debug("Writing report to '{}'.".format(outfilename))
-    write_counter = 0
-    spectra = set()
-    counts = {}
     prev_group = ""
     prev_domain_string = ""
+    totals = [0, 0]
     dom_counter = 0
     group_counter = 0
     first = True
@@ -79,10 +77,11 @@ def create_tandem_output_report(xmlfile, outdir):
                 first = True
                 dom_counter = 0
                 reportfile.write("{id:<7} {mh:<12} {z} {sumI:<4} {maxI:<12} {fI:<10} {label}\n".format(**group))
-                write_counter += 1
+                totals[0] += 1
 
             domain_string = "   {expect:<7} {hyperscore:<4} {seq}".format(**domain)
             dom_counter += 1
+            totals[1] += 1
             if domain_string != prev_domain_string:
                 prev_domain_string = domain_string
                 if first:
@@ -91,16 +90,13 @@ def create_tandem_output_report(xmlfile, outdir):
                     reportfile.write("  x{}\n".format(dom_counter))
                     group_counter += dom_counter
                 reportfile.write(domain_string)
-                    
+        else:
+            reportfile.write("  x{}\n".format(dom_counter))
+            group_counter += dom_counter
+            reportfile.write("  Total: {}\n".format(group_counter))
 
-            spectra.add(group["id"])
-            try:
-                counts[group["id"]] += 1
-            except KeyError:
-                counts[group["id"]] = 1
-
-    num_spectra = len(counts)
-    logging.info("Wrote {} lines to {}.".format(write_counter, outfilename))
+        reportfile.write("\nTotal number of spectra: {}\n".format(totals[0]))
+    logging.info("Wrote {} for {} spectra to {}.".format(totals[0], totals[1], outfilename))
 
 
 
