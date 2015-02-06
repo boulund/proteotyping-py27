@@ -22,6 +22,8 @@ def parse_commandline():
     parser.add_argument("FILES", metavar="FILE", nargs="+",
             help="""Input mzXML (or mzML) file(s) to search against database with. 
             File(s) can be gzipped and several files can be given.""")
+    parser.add_argument("--output", metavar="FILE", 
+            help="Output filename.")
     parser.add_argument("--db", metavar="DB",
             default="/shared/db/uniprot/tandem_reference/uniprot-all.fasta",
             help="Database to search against [%(default)s].")
@@ -97,7 +99,11 @@ def generate_xtandem_input_files(inputfiles):
         logging.debug("Preparing an input XML for '{}'".format(filename))
         input_xml_filename = "input_"+samplename+".xml"
         with open(input_xml_filename, "w") as input_xml:
-            input_xml.write(INPUT_XML.format(input=filename, samplename=samplename))
+            if options.output:
+                output = options.output
+            else:
+                output = "output_"+samplename+".xml"
+            input_xml.write(INPUT_XML.format(input=filename, output=output))
         logging.debug("Wrote '{}' for sample '{}'".format(input_xml_filename, samplename))
         yield input_xml_filename
 
@@ -195,7 +201,7 @@ INPUT_XML = """<?xml version="1.0"?>
 	<note type="input" label="list path, taxonomy information">taxonomy.xml</note>
 	<note type="input" label="protein, taxon">bacteria</note>
 	<note type="input" label="spectrum, path">{input}</note>
-	<note type="input" label="output, path">output_{samplename}.xml</note>
+	<note type="input" label="output, path">{output}.xml</note>
 </bioml>"""
 
 
