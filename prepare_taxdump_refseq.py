@@ -158,7 +158,7 @@ def parse_commandline(argv):
     parser.add_argument("TAXIDS", help="Path to gi_taxid_nucl.dmp (two column format).")
     parser.add_argument("REFDIR", help="Path to directory with reference sequences in FASTA format and sequence annotation in GFF format. Walks subfolders.")
 
-    parser.add_argument("--id_go_accno_pickle", dest="id_gi_accno_pickle", metavar="FILE",
+    parser.add_argument("--id_gi_accno_pickle", dest="id_gi_accno_pickle", metavar="FILE",
             default="id_gi_accno.pkl",
             help="Taxid_GI_ACCNO output file [default %(default)s]")
     parser.add_argument("--accno_annotation_pickle", dest="accno_annotation_pickle", metavar="FILE",
