@@ -4,11 +4,12 @@
 
 from sys import argv, exit
 from subprocess import Popen, PIPE
+from glob import glob
 import shlex
 import subprocess
 import argparse
 import logging
-from os import path, makedirs
+from os import path, makedirs, SEEK_END
 
 
 def parse_commandline():
@@ -44,7 +45,7 @@ def parse_commandline():
     return options
 
 
-def run_xtandem(input_xml_filename, options):
+def run_xtandem(input_xml_filename, outputxml_filename, options):
     """Runs X!!tandem on a single mzXML/mzML defined in an input.xml file.
     """
 
@@ -54,14 +55,22 @@ def run_xtandem(input_xml_filename, options):
     xtandem = Popen(xtandem_call, stdout=PIPE, stderr=PIPE)
     xtandem_output = xtandem.communicate()
     if xtandem.returncode != 0:
-        #logging.warning("X!!tandem: stdout: {}\n  stderr:{}".format(xtandem_output[0], xtandem_output[1]))
-        logging.warning("X!!tandem failed with non-zero exit code: stderr:{}".format(xtandem_output[1]))
+        xtandem_output_filename = glob(outputxml_filename+".*.xml")[-1]
+        with open(xtandem_output_filename) as outputxml:
+            outputxml.seek(-9, SEEK_END)
+            last_line = outputxml.readline()
+        if last_line == "</bioml>\n":
+            logging.warning("X!!tandem returned non-zero exit code, but outputfile looks OK!")
+        else:
+            logging.error("X!!tandem returned non-zero exit code, utputfile appears incomplete!")
     else:
         logging.info("Finished running X!!tandem for {}".format(input_xml_filename))
 
     with open(input_xml_filename+".log", "w") as log:
-        logging.debug("Writing X!!tandem stdout to file {}".format(log.name))
+        logging.debug("Writing X!!tandem stdout (and stderr) to file {}".format(log.name))
         log.write(xtandem_output[0])
+        log.write("\nSTDERR:\n")
+        log.write(xtandem_output[1])
 
 
 def create_misc_xtandem_files(options):
@@ -105,7 +114,7 @@ def generate_xtandem_input_files(inputfiles):
                 output = "output_"+samplename+".xml"
             input_xml.write(INPUT_XML.format(input=filename, output=output))
         logging.debug("Wrote '{}' for sample '{}'".format(input_xml_filename, samplename))
-        yield input_xml_filename
+        yield input_xml_filename, output
 
 
 # COMPLETE INPUT FILES FOR X!!TANDEM AS STRINGS
@@ -209,5 +218,5 @@ if __name__ == "__main__":
     options = parse_commandline()
 
     create_misc_xtandem_files(options)
-    for inputxml in generate_xtandem_input_files(options.FILES):
-        run_xtandem(inputxml, options)
+    for inputxml, outputxml in generate_xtandem_input_files(options.FILES):
+        run_xtandem(inputxml, outputxml, options)
