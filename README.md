@@ -100,18 +100,6 @@ modules:
    * lxml (3.3.5)
    * MySQL-python (1.2.5)
    * numpy (1.8.1)
-   * biopython (1.64)
-   * bx-python (0.7.1)
    * master-sake (0.9.4.2)
    * pandas (0.15.2)
    * ete2 (2.2.1072)   -- Requires lxml, MySQL-python, numpy, and PyQt4 is optional.
-
-NOTE: I never got PyQt4 installed properly. You get an annoying error message
-everytime you run proteotyping.py, but unless you're going to print some pretty
-trees you can do without it.  Make sure to install ete2 as the last package, as
-it depends on some others and won't install them as dependencies.
-
-    virtualenv venv
-    source venv/bin/activate
-    pip install lxml MySQL-python numpy biopython bx-python master-sake pandas 
-    pip install ete2
