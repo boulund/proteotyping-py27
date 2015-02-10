@@ -162,7 +162,7 @@ def parse_blat_output(filename):
             mismatches = int(blast8_line[4])
             startpos = int(blast8_line[8])
             endpos = int(blast8_line[9])
-            fragment_length = int(fragment_id.split("_")[1])
+            fragment_length = int(fragment_id.split()[0].split("_")[-1])
             fragment_coverage = matches/fragment_length
             hit = Hit(target_accno, identity, matches, mismatches, 
                     0, startpos, endpos, fragment_length, fragment_coverage)
