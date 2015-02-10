@@ -381,6 +381,7 @@ def load_gene_info(gene_info_file):
     """Reads NCBI gene_info a dictionary for geneID lookups.
     """
     gene_info = {}
+    logging.debug("Loading gene info from {}".format(gene_info_file))
     with open(gene_info_file) as f:
         if not f.readline().startswith("#Format:"):
             logging.error("'{}' does not appear to be an NCBI gene_info file.".format(gene_info_file))
@@ -392,6 +393,7 @@ def load_gene_info(gene_info_file):
             symbol = info[2]
             desc = info[8]
             gene_info[geneID] = (symbol, desc, taxid)
+    logging.debug("Gene info for {} genes loaded.".format(len(gene_info)))
     return gene_info
 
 
@@ -450,8 +452,14 @@ def load_annotation(annotation_pickle):
     """Loads annotation from previously prepared gff info pickle.
     """
 
+    logging.debug("Loading annotations from {}".format(annotation_pickle))
     with open(annotation_pickle, 'rb') as pkl:
         annotation = cPickle.load(pkl)
+        if len(annotation) == 0:
+            errorstring = "{} contains no annotations!".format(annotation_pickle)
+            logging.error(errorstring)
+            raise IOError(errorstring)
+    logging.debug("Loaded annotations for {} genes.".format(len(annotation)))
     return annotation
 
 

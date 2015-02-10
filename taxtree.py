@@ -47,9 +47,9 @@ def load_ncbi_tree_from_taxdump(dumpdir, taxid_gi_accno_pickle, rebase=0, return
     namesdump = dumpdir+"/names.dmp"
     nodesdump = dumpdir+"/nodes.dmp"
     if not os.path.isfile(namesdump):
-        raise Exception("Taxdump file {} not found.".format(namesdump))
+        raise IOError("Taxdump file {} not found.".format(namesdump))
     if not os.path.isfile(nodesdump):
-        raise Exception("Taxdump file {} not found.".format(nodesdump))
+        raise IOError("Taxdump file {} not found.".format(nodesdump))
 
     # Different name types can be included in the nodes if desired,
     # just add them to the set below.
@@ -69,6 +69,10 @@ def load_ncbi_tree_from_taxdump(dumpdir, taxid_gi_accno_pickle, rebase=0, return
     except IOError:
         logging.error("Couldn't load '{}'. Have you run prepare_taxdump_refseq.py?".format(taxid_gi_accno_pickle))
         exit()
+    if len(taxid2gi_accno) == 0:
+        errorstring = "{} contains no taxid:gi:accno mappings!".format(taxid_gi_accno_pickle)
+        logging.error(errorstring)
+        raise IOError(errorstring)
     logging.debug("{:>10} taxid:gi:accno mappings loaded.".format(len(taxid2gi_accno)))
 
     parent2child = {}
