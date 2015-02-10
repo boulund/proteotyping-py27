@@ -85,7 +85,7 @@ def parse_commandline(argv):
 
 
     devoptions = parser.add_argument_group("Developer options", "Voids warranty ;)")
-    devoptions.add_argument("--loglevel", choices=["INFO", "DEBUG"],
+    devoptions.add_argument("--loglevel", choices=["INFO", "DEBUG", "VERBOSE"],
             default="INFO", 
             help="Set logging level [%(default)s].")
     devoptions.add_argument("--logfile", dest="logfile", 
@@ -104,7 +104,10 @@ def parse_commandline(argv):
 
     options = parser.parse_args(argv[1:])
     logger = logging.getLogger()
-    logger.setLevel(options.loglevel)
+    if options.loglevel == "VERBOSE":
+        logger.setLevel(0)
+    else:
+        logger.setLevel(options.loglevel)
     fh = logging.FileHandler(options.logfile)
     ch = logging.StreamHandler()
     file_formatter = logging.Formatter("%(asctime)s %(levelname)s: %(message)s")
@@ -193,6 +196,7 @@ def informative_fragment(hitlist, tree, taxonomic_rank):
     if len(hitlist) > 0:
         hit_node = taxtree.search_for_accno(tree, hitlist[0].target_accno)
     else:
+        logging.warning("Found no node for {} in the tree".format(hitlist[0].target_accno))
         return False
 
     if hit_node:
@@ -205,7 +209,7 @@ def informative_fragment(hitlist, tree, taxonomic_rank):
             try:
                 ancestor = [n for n in ancestors if n.rank == taxonomic_rank][0]
             except:
-                logging.debug("Found no ancestor of correct rank")
+                logging.warning("Found no ancestor of correct rank")
                 return False
         logging.debug("Found ancestor {} at rank '{}'.".format(ancestor.name, ancestor.rank))
         child_nodes = []
@@ -214,7 +218,7 @@ def informative_fragment(hitlist, tree, taxonomic_rank):
                 child_nodes.append(accno)
         child_nodes = set(child_nodes)
     else:
-        logging.debug("Couldn't find a node for hit {}.".format(hitlist[0]))
+        logging.warning("Couldn't find a node for hit {}.".format(hitlist[0]))
         return False
 
     for hit in hitlist:
@@ -238,13 +242,13 @@ def filter_parallel(fragment_hitlist):
     # Filter hits based on user critera
     filtered_hitlist = []
     for hit in hitlist:
-        logging.debug("About to filter {}.".format(hit))
+        logging.log(0, "About to filter {}.".format(hit))
         if hit.identity >= options.identity:
-            logging.debug("  {} passed identity.".format(hit))
+            logging.log(0, "  {} passed identity.".format(hit))
             if hit.fragment_length >= options.fragment_length:
-                logging.debug("  {} passed fragment length.".format(hit))
+                logging.log(0, "  {} passed fragment length.".format(hit))
                 if hit.fragment_coverage >= options.fragment_coverage:
-                    logging.debug("  {} passed fragment coverage.".format(hit))
+                    logging.log(0, "  {} passed fragment coverage.".format(hit))
                     filtered_hitlist.append(hit)
 
     # Remove non-informative fragments
