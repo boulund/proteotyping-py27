@@ -44,7 +44,7 @@ def parse_fasta(filename):
 
 def find_files(directory, pattern):
     """Generator that yields files by recursively searching a dir with a glob pattern."""
-    for root, subfolders, files in os.walk(directory):
+    for root, subfolders, files in os.walk(directory, followlinks=True):
         for basename in files:
             if fnmatch.fnmatch(basename, pattern):
                 filename = os.path.join(root, basename)
