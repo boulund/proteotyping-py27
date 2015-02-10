@@ -1,0 +1,27 @@
+# Sakefile for preparing X!!tandem for use in proteotyping project
+# Fredrik Boulund 2014
+
+
+download parallel tandem:
+    help: Download parallel tandem source distribution from FTP
+    dependencies:
+    formula: >
+        wget ftp://maguro.cs.yale.edu/Projects/Tandem/parallel_tandem_10-12-01-1.tgz -O src/parallel_tandem_10-12-01-1.tgz
+    output:
+        - src/parallel_tandem_10-12-01-1.tgz
+
+
+compile tandem:
+    help: Modify source distribution and compile X!!tandem
+    dependencies:
+        - src/parallel_tandem_10-12-01-1.tgz
+    formula: >
+        cd src;
+        tar -xf parallel_tandem_10-12-01-1.tgz;
+        cd parallel_tandem_10-12-01-1/src;
+        sed -i '15 s|.*|CXXFLAGS = -DOC -O2 -DGCC4 -DPLUGGABLE_SCORING -g -O2 -I/c3se/apps/Glenn/boost/1_49_0/include -I/c3se/apps/Glenn/openmpi/1.4.4/include -I/c3se/apps/Glenn/openmpi/1.4.4/include/openmpi|' Makefile;
+        sed -i '18 s|.*|LDFLAGS = -lpthread -L/usr/lib/64:/c3se/apps/Glenn/boost/1_49_0/lib -lm -lexpat -lboost_serialization|' Makefile;
+        sed -i '227 s|.*|\n#include <stdio.h>\n#include <stdlib.h>\n#include <string.h>\n|' stdafx.h;
+        make;
+    output:
+        - src/parallel_tandem_10-12-01-1/bin/tandem.exe
