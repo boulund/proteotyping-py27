@@ -234,7 +234,7 @@ def informative_fragment(hitlist, tree, taxonomic_rank):
                 child_nodes.append(accno)
         child_nodes = set(child_nodes)
     else:
-        logging.warning("Found no node in the tree for {}.".format(hitlist[0]))
+        logging.warning("Found no node in the tree for {}.".format(hitlist[0].target_accno))
         return False
 
     for hit in hitlist:
