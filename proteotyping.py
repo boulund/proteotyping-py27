@@ -67,7 +67,7 @@ def parse_commandline(argv):
     parser.add_argument("--fragment_coverage", dest="fragment_coverage", metavar="C", type=float,
             default=1,
             help="Amount of fragment covered in alignment [%(default)s].")
-    parser.add_argument("--remove_noninformative", dest="remove_noninformative", action="store_false",
+    parser.add_argument("--remove_nondiscriminative", dest="remove_nondiscriminative", action="store_false",
             default=True, # TODO: This is unintuitive: reverse wording
             help="Remove fragments that match to more than one entity at the specific taxonomic level [%(default)s].")
     parser.add_argument("--maxprint", dest="maxprint", metavar="N", type=int,
@@ -122,7 +122,6 @@ def parse_commandline(argv):
     return options
 
 
-
 def parse_accno(s, group=1):
     """Parses the accession numbers (e.g. NC_001122.22) from a FASTA header string.
     
@@ -143,14 +142,17 @@ def parse_accno(s, group=1):
         raise Exception("ERROR finding accession string in {}".format(s))
 
 
-
-def parse_blat_output(filename):
-    """Parses blat output. Returns all hits for each fragment.
-
-    A hit is a named tuple with the following fields:
-    target_accno, identity, mathes, mismatches, score.
+def parse_blat_output(filename, options):
+    """Parses blat output. Filters hits based on user critera. 
+    
+    Critera used for filtering is:
+     options.identity
+     options.fragment_length
+     options.fragment_coverage
+    
     """
 
+    fragment_ids = set()
     hit_counter = 0
     hits = {}
 
@@ -167,14 +169,29 @@ def parse_blat_output(filename):
             endpos = int(blast8_line[9])
             fragment_length = int(fragment_id.split()[0].split("_")[-1])
             fragment_coverage = matches/fragment_length
-            hit = Hit(target_accno, identity, matches, mismatches, 
-                    0, startpos, endpos, fragment_length, fragment_coverage)
-            try:
-                hits[fragment_id].append(hit)
-            except KeyError:
-                hits[fragment_id] = [hit]
+
+            # Filter hits based on user critera
+            mapping = "{}::{}".format(fragment_id, target_accno)
+            if identity >= options.identity:
+                logging.log(0, "  {} passed identity.".format(mapping))
+                if fragment_length >= options.fragment_length:
+                    logging.log(0, "  {} passed fragment length.".format(mapping))
+                    if fragment_coverage >= options.fragment_coverage:
+                        logging.log(0, "  {} passed fragment coverage.".format(mapping))
+                        hit = Hit(target_accno, identity, matches, mismatches, 
+                                  0, startpos, endpos, fragment_length, fragment_coverage)
+                        try:
+                            hits[fragment_id].append(hit)
+                        except KeyError:
+                            hits[fragment_id] = [hit]
+
+            # Fragment and hit counting logic
+            if fragment_id not in fragment_ids:
+                fragment_ids.add(fragment_id)
             hit_counter += 1
-    logging.info("Parsed {} hits for {} fragments.".format(hit_counter, len(hits)))
+    num_hits_remaining = sum(map(len, [hitlist for hitlist in hits.itervalues()]))
+    logging.info("Parsed {} hits for {} fragments.".format(hit_counter, len(fragment_ids)))
+    logging.info("{} fragments with {} hits remain after filtering ({} hits were removed).".format(len(hits), num_hits_remaining, hit_counter-num_hits_remaining))
     return hits
 
 
@@ -192,7 +209,6 @@ def informative_fragment(hitlist, tree, taxonomic_rank):
     Returns False otherwise.
     """
     
-    rank_name = ""
     if len(hitlist) > 0:
         hit_node = taxtree.search_for_accno(tree, hitlist[0].target_accno)
     else:
@@ -232,64 +248,50 @@ def informative_fragment(hitlist, tree, taxonomic_rank):
 
 
 def filter_parallel(fragment_hitlist):
-    """Filter hits in parallel using multiprocessing.
+    """Find discriminative hits.
+    
+    Designed to be used in multiprocessing: pool.map(filter_parallel, items).
+
+    Uses global variables:
+     options.taxonomic_rank
+     tree
+
+    Returns None if fragment is not informative.
     """
 
     fragment_id, hitlist = fragment_hitlist
 
-    startlen = len(hitlist)
-
-    # Filter hits based on user critera
-    filtered_hitlist = []
-    for hit in hitlist:
-        logging.log(0, "About to filter {}.".format(hit))
-        if hit.identity >= options.identity:
-            logging.log(0, "  {} passed identity.".format(hit))
-            if hit.fragment_length >= options.fragment_length:
-                logging.log(0, "  {} passed fragment length.".format(hit))
-                if hit.fragment_coverage >= options.fragment_coverage:
-                    logging.log(0, "  {} passed fragment coverage.".format(hit))
-                    filtered_hitlist.append(hit)
-
-    # Remove non-informative fragments
-    if len(filtered_hitlist) > 0:
-        if options.remove_noninformative:
-            if not informative_fragment(filtered_hitlist, tree, options.taxonomic_rank):
-                logging.debug("Fragment {} is not informative".format(fragment_id))
-                return 
-            if logging.getLogger().getEffectiveLevel() < 20:
-                logging.debug("Fragment {} is informative with hits to:".format(fragment_id))
-                for hit in filtered_hitlist:
-                    logging.debug("  {}".format(hit.target_accno))
-        filtered_hitlist.sort(key=lambda hit: hit.matches, reverse=True) # Just nice to have it sorted
-
-    return (fragment_id, filtered_hitlist)
-
-    
-
-
-
+    if options.remove_nondiscriminative:
+        if not informative_fragment(hitlist, tree, options.taxonomic_rank):
+            logging.debug("Fragment {} is not informative".format(fragment_id))
+            return 
+        if logging.getLogger().getEffectiveLevel() < 20:
+            logging.debug("Fragment {} is informative with hits to:".format(fragment_id))
+            for hit in hitlist:
+                logging.debug("  {}".format(hit.target_accno))
+    return (fragment_id, hitlist)
 
 
 def filter_hits(hits, tree, options): 
-    """Filter hits based on user critera.
+    """Determine if hits are disciminative at options.taxonomic_rank.
+
+    Runs in parallel using multiprocessing with options.numCPUs
     """
 
-    filtered_hits = {}
-    logging.debug("Starting pool of {} workers to filter hits.".format(options.numCPUs))
+    logging.debug("Starting pool of {} workers to filter out discriminative fragments.".format(options.numCPUs))
     pool = Pool(options.numCPUs)
     result_list = pool.map(filter_parallel, hits.items())
 
+    # Merge all results
+    filtered_hits = {}
     for result in result_list:
         if result is not None:
             fragment_id, filtered_hitlist = result
             filtered_hits[fragment_id] = filtered_hitlist
 
-    logging.info("Filtered {} fragments. {} fragments with {} hits remain.".format(len(hits)-len(filtered_hits), 
+    logging.info("Removed {} non-discriminative fragments. {} discriminative fragments with {} hits remain.".format(len(hits)-len(filtered_hits), 
         len(filtered_hits), sum(map(len, [hits for hits in filtered_hits.itervalues()]))))
-
     return filtered_hits
-
 
 
 def insert_hits_into_tree(tree, hits):
@@ -354,7 +356,7 @@ def write_top_n_hits(outfilehandle, tree, taxonomic_rank, totalhits, n=10, walk=
         outfilehandle.write("     %  #         TAXID       TAXNAME                         ACCNO(s)\n")
         for i in xrange(0,N):
             n = nodes_to_print[i]
-            outfilehandle.write("{:>6.2f}  {:<8}  {:<10}  {:<30}  {:<}\n".format(100*n.count/float(totalhits), n.count, n.name, n.taxname, ";".join(n.accno)))
+            outfilehandle.write("{:>6.2f}  {:<8}  {:<10}  {:<30}  {:<}\n".format(100.0*n.count/float(totalhits), n.count, n.name, n.taxname, ";".join(n.accno)))
     else:
         outfilehandle.write("Nothing filtered through at {} level.".format(taxonomic_rank))
 
@@ -394,7 +396,6 @@ def load_gene_info(gene_info_file):
             gene_info[geneID] = (symbol, desc, taxid)
     logging.debug("Gene info for {} genes loaded.".format(len(gene_info)))
     return gene_info
-
 
 
 def count_annotation_hits(hits, annotation):
@@ -446,7 +447,6 @@ def write_gene_counts(outfilehandle, gene_counts, gene_info, maxprint=50, sort=T
     outfilehandle.write("Printed {} out of {} hit annotated regions.\n".format(printcounter, len(counts)))
 
 
-
 def load_annotation(annotation_pickle):
     """Loads annotation from previously prepared gff info pickle.
     """
@@ -458,9 +458,8 @@ def load_annotation(annotation_pickle):
             errorstring = "{} contains no annotations!".format(annotation_pickle)
             logging.error(errorstring)
             raise IOError(errorstring)
-    logging.debug("Loaded annotations for {} genes.".format(len(annotation)))
+    logging.debug("Annotations for {} genes loaded.".format(len(annotation)))
     return annotation
-
 
 
 def wait_for_user_input(options):
@@ -474,7 +473,7 @@ Enter options to change filtering criteria and run again:
  Some options can be combined with numbers, e.g. 'l 10' changes the filtering length to 10.
  Separate multiple options with ','.
  Type 'q' and press enter to quit.
-Input: """.format(options.fragment_length, options.fragment_coverage, options.identity, options.remove_noninformative)
+Input: """.format(options.fragment_length, options.fragment_coverage, options.identity, options.remove_nondiscriminative)
     try:
         user_input = raw_input(instructions)
         for param in [a.strip() for a in user_input.split(",")]:
@@ -497,7 +496,7 @@ Input: """.format(options.fragment_length, options.fragment_coverage, options.id
                     print "ERROR: Cannot parse fragment coverage. Try again."
                     return wait_for_user_input(options)
             elif param.lower().startswith("r"):
-                options.remove_noninformative = not options.remove_noninformative
+                options.remove_nondiscriminative = not options.remove_nondiscriminative
             elif param.lower().startswith("q"):
                 print "User exited."
                 exit()
@@ -543,28 +542,24 @@ def write_results(filename, tree, hits, filtered_hits, totalhits, annotation, op
             write_gene_counts(outfile, gene_counts, gene_info, options.maxprint)
 
 
-
 def main(filename, tree, options):
     """Main function that runs the complete pipeline logic.
     """
 
-    hits = parse_blat_output(filename)
-    filtered_hits = filter_hits(hits, tree, options)
-    totalhits = sum(map(len, [hits for hits in filtered_hits.itervalues()]))
+    hits = parse_blat_output(filename, options)
+    discriminative_hits = filter_hits(hits, tree, options)
+    totalhits = sum(map(len, [hits for hits in discriminative_hits.itervalues()]))
 
     if logging.getLogger().getEffectiveLevel() < 20:
-        logging.debug("All filtered hits:")
-        for fragment, hitlist in filtered_hits.iteritems():
+        logging.log(0,"All filtered hits:")
+        for fragment, hitlist in discriminative_hits.iteritems():
             for hit in hitlist:
-                logging.debug("  {} {}".format(fragment, hit))
+                logging.log(0,"  {} {}".format(fragment, hit))
 
-    insert_hits_into_tree(tree, filtered_hits)
+    insert_hits_into_tree(tree, discriminative_hits)
     sum_up_the_tree(tree)
 
-    write_results(filename, tree, hits, filtered_hits, totalhits, annotation, options)
-
-    
-
+    write_results(filename, tree, hits, discriminative_hits, totalhits, annotation, options)
 
 
 if __name__ == "__main__":
