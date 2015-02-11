@@ -196,7 +196,7 @@ def informative_fragment(hitlist, tree, taxonomic_rank):
     if len(hitlist) > 0:
         hit_node = taxtree.search_for_accno(tree, hitlist[0].target_accno)
     else:
-        logging.warning("Found no node for {} in the tree".format(hitlist[0].target_accno))
+        logging,warning("Empty hitlist! (This should never happen)".format(hitlist))
         return False
 
     if hit_node:
@@ -218,7 +218,7 @@ def informative_fragment(hitlist, tree, taxonomic_rank):
                 child_nodes.append(accno)
         child_nodes = set(child_nodes)
     else:
-        logging.warning("Couldn't find a node for hit {}.".format(hitlist[0]))
+        logging.warning("Found no node in the tree for {}.".format(hitlist[0]))
         return False
 
     for hit in hitlist:
@@ -252,16 +252,15 @@ def filter_parallel(fragment_hitlist):
                     filtered_hitlist.append(hit)
 
     # Remove non-informative fragments
-    if options.remove_noninformative:
-        if not informative_fragment(filtered_hitlist, tree, options.taxonomic_rank):
-            logging.debug("Fragment {} is not informative".format(fragment_id))
-            return 
-        if logging.getLogger().getEffectiveLevel() < 20:
-            logging.debug("Fragment {} is informative with hits to:".format(fragment_id))
-            for hit in filtered_hitlist:
-                logging.debug("  {}".format(hit.target_accno))
-
-    if len(filtered_hitlist)>0:
+    if len(filtered_hitlist) > 0:
+        if options.remove_noninformative:
+            if not informative_fragment(filtered_hitlist, tree, options.taxonomic_rank):
+                logging.debug("Fragment {} is not informative".format(fragment_id))
+                return 
+            if logging.getLogger().getEffectiveLevel() < 20:
+                logging.debug("Fragment {} is informative with hits to:".format(fragment_id))
+                for hit in filtered_hitlist:
+                    logging.debug("  {}".format(hit.target_accno))
         filtered_hitlist.sort(key=lambda hit: hit.matches, reverse=True) # Just nice to have it sorted
 
     return (fragment_id, filtered_hitlist)
