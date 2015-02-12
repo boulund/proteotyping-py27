@@ -76,9 +76,6 @@ def parse_commandline(argv):
     parser.add_argument("--maxprint", dest="maxprint", metavar="N", type=int,
             default=50,
             help="Maximum number of hit annotations to print [%(default)s].")
-    parser.add_argument("--print_all_hit_annotations", dest="print_all_hit_annotations", action="store_true",
-            default=False,
-            help="Print a listing of all hit annotations (and not only hits from filtered peptide fragments) [%(default)s].")
     parser.add_argument("--output", dest="output",
             default="",
             help="Write results to this filename [results/FILE.results].")
@@ -159,7 +156,7 @@ def parse_blat_output(filename, options):
     hit_counter = 0
     hits = {}
 
-    logging.info("Parsing and performing absolute filtering of hits from {}".format(filename))
+    logging.info("Parsing and performing absolute filtering of hits from '{}'...".format(filename))
     with open(filename) as blast8:
         for line in blast8:
             blast8_line = line.split()
@@ -206,194 +203,6 @@ def parse_blat_output(filename, options):
     return hits
 
 
-def filter_relative(hits, identity_difference):
-    """Perform relative filtering for each fragment.
-
-    Removes hits from each fragment's hitlist that have identity less
-    than max(hitlist)-identity_difference.
-    Modifies hits in place!
-    """
-
-    logging.info("Performing relative filtering on hits for each fragment...")
-    num_removals = 0
-    for fragment, hitlist in hits.iteritems():
-        highest_identity = max(hitlist, key=lambda hit: hit.identity).identity
-        startlen = len(hitlist)
-        hitlist = [hit for hit in hitlist if hit.identity >= highest_identity-identity_difference]
-        postlen = len(hitlist)
-        num_removals += startlen - postlen
-        logging.log(0, "Relative filtering of hitlist for fragment {} removed {} out of {} hits. {} hits remain".format(fragment, startlen-postlen, startlen, postlen))
-        hits[fragment] = hitlist
-    logging.info("{} hits were removed by relative filtering criteria.".format(num_removals))
-
-
-def informative_fragment(hitlist, tree, taxonomic_rank):
-    """Return True if hitlist for a given fragment is considered informative.
-
-    Searches the tree for the node corresponding to the first hit in the
-    hitlist, then finds the ancestor at the correct taxonomic rank and creates
-    a set of all nodes beneath that node to which all the remaining hits in the
-    list are compared. If a hit is not to a node in the set, the fragment is
-    not informative.
-
-    Returns True if fragment is informative (if hitlist only contains hits that
-    match beneath the same node of rank 'taxonomic_rank').
-    Returns False otherwise.
-    """
-    
-    if len(hitlist) > 0:
-        hit_node = taxtree.search_for_accno(tree, hitlist[0].target_accno)
-    else:
-        logging,warning("Empty hitlist! (This should never happen)".format(hitlist))
-        return False
-
-    if hit_node:
-        # TODO: Potential bug here, I assume only one hit_node in the list.
-        logging.debug("Found hit to node {}.".format(hit_node[0].name))
-        if hit_node[0].rank == taxonomic_rank:
-            ancestor = hit_node[0]
-        else:
-            ancestors = hit_node[0].get_ancestors()
-            try:
-                ancestor = [n for n in ancestors if n.rank == taxonomic_rank][0]
-            except:
-                logging.warning("Found no ancestor of correct rank")
-                return False
-        logging.debug("Found ancestor {} at rank '{}'.".format(ancestor.name, ancestor.rank))
-        child_nodes = []
-        for descendant in ancestor.get_descendants():
-            for accno in descendant.accno:
-                child_nodes.append(accno)
-        child_nodes = set(child_nodes)
-    else:
-        logging.warning("Found no node in the tree for {}.".format(hitlist[0].target_accno))
-        return False
-
-    for hit in hitlist:
-        if hit.target_accno not in child_nodes:
-            logging.debug("{} was not found in {}".format(hit.target_accno, child_nodes))
-            return False
-    logging.debug("All hits hit under the same taxonomic level, informative fragment!")
-    logging.debug("Informative fragment hits to {}".format(hit_node[0].taxname))
-    logging.debug("  Informative hits to {}".format(" ".join([hit.target_accno for hit in hitlist])))
-    return True
-
-
-def filter_parallel(fragment_hitlist):
-    """Find discriminative hits.
-    
-    Designed to be used in multiprocessing: pool.map(filter_parallel, items).
-
-    Uses global variables:
-     options.taxonomic_rank
-     tree
-
-    Returns None if fragment is not informative.
-    """
-
-    fragment_id, hitlist = fragment_hitlist
-    global tree
-
-    if options.remove_nondiscriminative:
-        if not informative_fragment(hitlist, tree, options.taxonomic_rank):
-            logging.debug("Fragment {} is not informative".format(fragment_id))
-            return 
-        if logging.getLogger().getEffectiveLevel() < 20:
-            logging.debug("Fragment {} is informative with hits to:".format(fragment_id))
-            for hit in hitlist:
-                logging.debug("  {}".format(hit.target_accno))
-    return (fragment_id, hitlist)
-
-
-def filter_hits(hits, tree, options): 
-    """Determine if hits are disciminative at options.taxonomic_rank.
-
-    Runs in parallel using multiprocessing with options.numCPUs
-    """
-
-    logging.debug("Starting pool of {} workers to filter out discriminative fragments.".format(options.numCPUs))
-    pool = Pool(options.numCPUs)
-    result_list = pool.map(filter_parallel, hits.items())
-
-    # Merge all results
-    filtered_hits = {}
-    for result in result_list:
-        if result is not None:
-            fragment_id, filtered_hitlist = result
-            filtered_hits[fragment_id] = filtered_hitlist
-
-    logging.info("Removed {} non-discriminative fragments. {} discriminative fragments with {} hits remain.".format(len(hits)-len(filtered_hits), 
-        len(filtered_hits), sum(map(len, [hits for hits in filtered_hits.itervalues()]))))
-    return filtered_hits
-
-
-def insert_hits_into_tree(tree, hits):
-    """Updates counts on nodes in-place.
-    """
-    accnos_set = set()
-    count_per_accno = {}
-    for fragment_id, hitlist in hits.iteritems():
-        for hit in hitlist:
-            accnos_set.add(hit.target_accno)
-            try:
-                count_per_accno[hit.target_accno] += 1
-            except KeyError:
-                count_per_accno[hit.target_accno] = 1
-    for node in tree.traverse():
-        for accno in node.accno:
-            if accno in accnos_set:
-                node.count += count_per_accno[accno] 
-                logging.debug("Updated count of node {} with accno {} to {}.".format(node.name, accno, node.count)) # Verbose
-
-
-def sum_up_the_tree(tree):
-    """Sums counts up the taxonomic tree, all the way to the root node.
-
-    In the end, root node.count should be the same as the total number of
-    counts in the tree when starting out.
-    """
-    for leaf in tree.get_leaves(): #(is_leaf_fn=lambda n: n.count > 0):
-        lineage = leaf.get_ancestors()
-        lineage.insert(0, leaf)
-        for idx, parent in enumerate(lineage[1:]):
-            parent.count += leaf.count
-
-
-def reset_tree(tree):
-    """Resets counts on all nodes for use in interactive mode.
-    """
-    for node in tree.traverse():
-        node.count = 0
-
-
-def write_top_n_hits(outfilehandle, tree, taxonomic_rank, totalhits, n=10, walk=False):
-    """Writes the top 'n' nodes with the highest counts (and thus percentages).
-
-    outfilehandle is an already opened filehandle.
-    """
-    nodes_to_print = []
-    if walk:
-        for node in tree.traverse(is_leaf_fn=lambda n: n.rank == taxonomic_rank):
-            if node.count > 0:
-                nodes_to_print.append(node)
-    else:
-        for node in tree.iter_leaves(is_leaf_fn=lambda n: n.rank == taxonomic_rank and n.count > 0):
-            nodes_to_print.append(node)
-    nodes_to_print.sort(key=lambda n: n.count, reverse=True)
-    num_nodes = len(nodes_to_print)
-    if num_nodes > 0:
-        if num_nodes < n:
-            N = num_nodes
-        else:
-            N = n
-        outfilehandle.write("     %  #         TAXID       TAXNAME                         ACCNO(s)\n")
-        for i in xrange(0,N):
-            n = nodes_to_print[i]
-            outfilehandle.write("{:>6.2f}  {:<8}  {:<10}  {:<30}  {:<}\n".format(100.0*n.count/float(totalhits), n.count, n.name, n.taxname, ";".join(n.accno)))
-    else:
-        outfilehandle.write("Nothing filtered through at {} level.".format(taxonomic_rank))
-
-
 def load_taxtree_bg(queue, taxtree_pickle, taxdumpdir, id_gi_accno_pickle, rebase):
     """Determine if previous taxtree_pickle is available and load it, otherwise create new.
     """
@@ -431,14 +240,203 @@ def load_gene_info_bg(queue, gene_info_file):
     queue.put(gene_info)
 
 
-def count_annotation_hits(hits, annotation):
+def load_annotation_bg(queue, annotation_pickle):
+    """Loads annotation from previously prepared gff info pickle.
+    """
+
+    logging.debug("Loading annotations from '{}' in background...".format(annotation_pickle))
+    with open(annotation_pickle, 'rb') as pkl:
+        annotation = cPickle.load(pkl)
+        if len(annotation) == 0:
+            errorstring = "{} contains no annotations!".format(annotation_pickle)
+            logging.error(errorstring)
+            raise IOError(errorstring)
+    logging.debug("Annotations for {} genes loaded.".format(len(annotation)))
+    queue.put(annotation)
+
+
+def filter_relative(hits, identity_difference):
+    """Perform relative filtering for each fragment.
+
+    Removes hits from each fragment's hitlist that have identity less
+    than max(hitlist)-identity_difference.
+    Modifies hits in place!
+    """
+
+    logging.info("Performing relative filtering of hits for each fragment...")
+    num_removals = 0
+    for fragment, hitlist in hits.iteritems():
+        highest_identity = max(hitlist, key=lambda hit: hit.identity).identity
+        startlen = len(hitlist)
+        hitlist = [hit for hit in hitlist if hit.identity >= highest_identity-identity_difference]
+        postlen = len(hitlist)
+        num_removals += startlen - postlen
+        logging.log(0, "Relative filtering of hitlist for fragment {} removed {} out of {} hits. {} hits remain".format(fragment, startlen-postlen, startlen, postlen))
+        hits[fragment] = hitlist
+    logging.info("{} hits were removed by relative filtering criteria.".format(num_removals))
+
+
+def informative_fragment(hitlist, tree, taxonomic_rank):
+    """Return True if hitlist for a given fragment is considered informative.
+
+    Searches the tree for the node corresponding to the first hit in the
+    hitlist, then finds the ancestor at the correct taxonomic rank and creates
+    a set of all nodes beneath that node to which all the remaining hits in the
+    list are compared. If a hit is not to a node in the set, the fragment is
+    not informative.
+
+    Returns True if fragment is informative (if hitlist only contains hits that
+    match beneath the same node of rank 'taxonomic_rank').
+    Returns False otherwise.
+    """
+    
+    if len(hitlist) > 0:
+        hit_node = taxtree.search_for_accno(tree, hitlist[0].target_accno)
+        if len(hit_node) > 1:
+            logging.warning("Found more than one node for target accno {}".format(hitlist[0].target_accno))
+    else:
+        logging,warning("Empty hitlist! (This should never happen)".format(hitlist))
+        return False
+
+    if hit_node:
+        logging.debug("Found hit to node {}.".format(hit_node[0].name))
+        if hit_node[0].rank == taxonomic_rank:
+            ancestor = hit_node[0]
+        else:
+            ancestors = hit_node[0].get_ancestors()
+            try:
+                ancestors = [n for n in ancestors if n.rank == taxonomic_rank]
+                if len(ancestors) > 1:
+                    logging.warning("Found multiple ancestors of correct rank: {}".format(ancestors))
+                ancestor = ancestors[0]
+            except:
+                logging.warning("Found no ancestor of correct rank")
+                return False
+        logging.debug("Found ancestor {} at rank '{}'.".format(ancestor.name, ancestor.rank))
+        child_nodes = set()
+        for descendant in ancestor.get_descendants():
+            for accno in descendant.accno:
+                child_nodes.add(accno)
+    else:
+        logging.warning("Found no node in the tree for {}.".format(hitlist[0].target_accno))
+        return False
+
+    for hit in hitlist:
+        if hit.target_accno not in child_nodes:
+            logging.log(0, "{} was not found in {}".format(hit.target_accno, child_nodes))
+            return False
+    logging.debug("All hits hit under the same taxonomic level, informative fragment!")
+    logging.debug("Informative fragment for {} hits to {}".format(ancestor.taxname, hit_node[0].taxname))
+    logging.log(0, "  Informative hits to {}".format(" ".join([hit.target_accno for hit in hitlist])))
+    return True, ancestor.name
+
+
+def filter_parallel(fragment_hitlist):
+    """Find discriminative hits.
+    
+    Designed to be used in multiprocessing: pool.map(filter_parallel, items).
+
+    Uses global variables:
+     options.taxonomic_rank
+     tree
+
+    Returns None if fragment is not informative.
+    """
+
+    fragment_id, hitlist = fragment_hitlist
+    global tree
+
+    if options.remove_nondiscriminative:
+        informative, taxid = informative_fragment(hitlist, tree, options.taxonomic_rank)
+        if not informative:
+            logging.debug("Fragment {} is not informative".format(fragment_id))
+            return 
+        if logging.getLogger().getEffectiveLevel() < 20:
+            logging.log(0, "Fragment {} is informative with hits to:".format(fragment_id))
+            for hit in hitlist:
+                logging.log(0, "  {}".format(hit.target_accno))
+    return (fragment_id, hitlist, taxid)
+
+
+def filter_hits(hits, tree, options): 
+    """Determine if hits are disciminative at options.taxonomic_rank.
+
+    Runs in parallel using multiprocessing with options.numCPUs
+    """
+
+    logging.info("Removing non-discriminative fragments...")
+    logging.debug("Starting pool of {} workers to filter out discriminative fragments.".format(options.numCPUs))
+    pool = Pool(options.numCPUs)
+    result_list = pool.map(filter_parallel, hits.items())
+
+    # Merge all results
+    filtered_hits = {}
+    for result in result_list:
+        if result is not None:
+            fragment_id, filtered_hitlist, taxid = result
+            filtered_hits[fragment_id] = (filtered_hitlist, taxid)
+
+    logging.info("Removed {} non-discriminative fragments. {} discriminative fragments with {} hits remain.".format(len(hits) - len(filtered_hits), 
+        len(filtered_hits), 
+        sum(map(len, [hitlist for hitlist, _ in filtered_hits.itervalues()]))
+        ))
+    return filtered_hits
+
+
+def insert_hits_into_tree(tree, discriminative_hits):
+    """Updates counts on nodes in-place.
+    """
+    count_per_accno = {}
+    fragments_per_taxid = {}
+    for fragment_id, hitlist_taxid_tuple in discriminative_hits.iteritems():
+        for hit in hitlist_taxid_tuple[0]:
+            try:
+                count_per_accno[hit.target_accno] += 1
+            except KeyError:
+                count_per_accno[hit.target_accno] = 1
+        try:
+            fragments_per_taxid[hitlist_taxid_tuple[1]] += 1
+        except KeyError:
+            fragments_per_taxid[hitlist_taxid_tuple[1]] = 0
+    accnos = set(count_per_accno.keys())
+    taxids = set(fragments_per_taxid.keys())
+    for node in tree.traverse():
+        for accno in node.accno:
+            if accno in accnos:
+                node.count += count_per_accno[accno] 
+                logging.log(0, "Updated count of node {} with accno {} to {}.".format(node.name, accno, node.count))
+        if node.name in taxids:
+            node.discriminative_fragments += fragments_per_taxid[node.name]
+            logging.debug("Updated number of discriminative fragments of node {} to {}.".format(node.name, fragments_per_taxid[node.name]))
+
+
+def sum_up_the_tree(tree):
+    """Sums counts up the taxonomic tree, all the way to the root node.
+
+    In the end, root node.count should be the same as the total number of
+    counts in the tree when starting out.
+    """
+    for leaf in tree.get_leaves(): #(is_leaf_fn=lambda n: n.count > 0):
+        lineage = leaf.get_ancestors()
+        lineage.insert(0, leaf)
+        for idx, parent in enumerate(lineage[1:]):
+            parent.count += leaf.count
+
+
+def reset_tree(tree):
+    """Resets counts on all nodes for use in interactive mode.
+    """
+    for node in tree.traverse():
+        node.count = 0
+
+
+def count_annotation_hits(discriminative_hits, annotation):
     """Annotates hits to determine what genes were hit.
     """
 
     missing_annotation = set()
-
     gene_counts = {}
-    for hitlist in hits.itervalues():
+    for hitlist, _ in discriminative_hits.itervalues():
         for hit in hitlist:
             accno = hit.target_accno
             try:
@@ -451,7 +449,6 @@ def count_annotation_hits(hits, annotation):
                                 gene_counts[annot.geneID] = 1
             except KeyError:
                 missing_annotation.add(accno)
-
     if missing_annotation:
         logging.warning("Couldn't find annotation for:\n{}.".format("\n".join(missing_annotation)))
     return gene_counts
@@ -480,22 +477,35 @@ def write_gene_counts(outfilehandle, gene_counts, gene_info, maxprint=50, sort=T
     outfilehandle.write("Printed {} out of {} hit annotated regions.\n".format(printcounter, len(counts)))
 
 
-def load_annotation_bg(queue, annotation_pickle):
-    """Loads annotation from previously prepared gff info pickle.
+def write_top_n_at_taxonomic_rank(outfilehandle, tree, taxonomic_rank, num_discriminative_fragments, n=10, walk=False):
+    """Writes the top 'n' nodes with the highest number of discriminative fragments.
+
+    outfilehandle is an already opened filehandle.
     """
+    nodes_to_print = []
+    if walk:
+        for node in tree.traverse(is_leaf_fn=lambda n: n.rank == taxonomic_rank):
+            if node.discriminative_fragments > 0:
+                nodes_to_print.append(node)
+    else:
+        for node in tree.iter_leaves(is_leaf_fn=lambda n: n.rank == taxonomic_rank and n.discriminative_fragments > 0):
+            nodes_to_print.append(node)
+    nodes_to_print.sort(key=lambda n: n.discriminative_fragments, reverse=True)
+    num_nodes = len(nodes_to_print)
+    if num_nodes > 0:
+        if num_nodes < n:
+            N = num_nodes
+        else:
+            N = n
+        outfilehandle.write("     %  #         TAXID       TAXNAME\n")
+        for i in xrange(0,N):
+            n = nodes_to_print[i]
+            outfilehandle.write("{:>6.2f}  {:<8}  {:<10}  {:<30}\n".format(100.0*n.discriminative_fragments/float(num_discriminative_fragments), n.discriminative_fragments, n.name, n.taxname))
+    else:
+        outfilehandle.write("Nothing filtered through at {} level.".format(taxonomic_rank))
 
-    logging.debug("Loading annotations from '{}' in background...".format(annotation_pickle))
-    with open(annotation_pickle, 'rb') as pkl:
-        annotation = cPickle.load(pkl)
-        if len(annotation) == 0:
-            errorstring = "{} contains no annotations!".format(annotation_pickle)
-            logging.error(errorstring)
-            raise IOError(errorstring)
-    logging.debug("Annotations for {} genes loaded.".format(len(annotation)))
-    queue.put(annotation)
 
-
-def write_results(filename, tree, hits, filtered_hits, totalhits, gene_info, annotation, options):
+def write_results(filename, tree, discriminative_hits, num_discriminative_fragments, gene_info, annotation, options):
     """Write results to file.
     """
 
@@ -511,24 +521,20 @@ def write_results(filename, tree, hits, filtered_hits, totalhits, gene_info, ann
     with open(outfilename, "w") as outfile:
         outfile.write("Results at rank '{}' for file {}\n".format(options.taxonomic_rank, filename))
         outfile.write("-"*70+"\n")
-        write_top_n_hits(outfile, tree, options.taxonomic_rank, totalhits, n=options.display, walk=options.walk)
-        outfile.write(" Total: {:<}\n".format(totalhits))
+        write_top_n_at_taxonomic_rank(outfile, tree, options.taxonomic_rank, num_discriminative_fragments, n=options.display, walk=options.walk)
+        outfile.write(" Total: {:<}\n".format(num_discriminative_fragments))
 
         outfile.write("-"*70+"\n")
-        if options.print_all_hit_annotations:
-            gene_counts = count_annotation_hits(hits, annotation)
-            outfile.write("All hit annotated regions:\n")
-            write_gene_counts(outfile, gene_counts, gene_info, options.maxprint)
-        else:
-            gene_counts = count_annotation_hits(filtered_hits, annotation)
-            outfile.write("Annotated regions hit by filtered fragments:\n")
-            write_gene_counts(outfile, gene_counts, gene_info, options.maxprint)
+        gene_counts = count_annotation_hits(discriminative_hits, annotation)
+        outfile.write("Annotated regions hit by discriminative fragments:\n")
+        write_gene_counts(outfile, gene_counts, gene_info, options.maxprint)
 
 
 def main(filename, options):
     """Main function that runs the complete pipeline logic.
     """
 
+    # Setup background loading of tree, gene_info, and annotation
     tree_queue = Queue()
     gene_info_queue = Queue()
     annotation_queue = Queue()
@@ -549,12 +555,12 @@ def main(filename, options):
     bg_tree_loader.join()
 
     discriminative_hits = filter_hits(hits, tree, options)
-    totalhits = sum(map(len, [hits for hits in discriminative_hits.itervalues()]))
+    num_discriminative_fragments = len(discriminative_hits)
 
     if logging.getLogger().getEffectiveLevel() < 20:
         logging.log(0,"All filtered hits:")
-        for fragment, hitlist in discriminative_hits.iteritems():
-            for hit in hitlist:
+        for fragment, hitlist_taxid in discriminative_hits.iteritems():
+            for hit in hitlist[0]:
                 logging.log(0,"  {} {}".format(fragment, hit))
 
     insert_hits_into_tree(tree, discriminative_hits)
@@ -566,7 +572,12 @@ def main(filename, options):
     bg_gene_info_loader.join()
     bg_annotation_loader.join()
 
-    write_results(filename, tree, hits, discriminative_hits, totalhits, gene_info, annotation, options)
+    write_results(filename, tree, discriminative_hits, num_discriminative_fragments, gene_info, annotation, options)
+
+    if options.interactive:
+        global discriminative_hits
+        global gene_info
+        global annotation
 
 
 if __name__ == "__main__":
