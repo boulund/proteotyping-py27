@@ -15,6 +15,8 @@ import os
 import argparse
 import logging
 import re
+import gc
+gc.disable()
 
 from prepare_taxdump_refseq import find_files, Annotation
 import taxtree
