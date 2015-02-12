@@ -67,6 +67,9 @@ def parse_commandline(argv):
     parser.add_argument("--fragment_coverage", dest="fragment_coverage", metavar="C", type=float,
             default=1,
             help="Amount of fragment covered in alignment [%(default)s].")
+    parser.add_argument("--identity_difference", type=float, metavar="D",
+            default=5.0,
+            help="Maximum identity difference between highest and lowest hit for each fragment. Floating point between 0.0-100.0 [%(default)s].")
     parser.add_argument("--remove_nondiscriminative", dest="remove_nondiscriminative", action="store_false",
             default=True, # TODO: This is unintuitive: reverse wording
             help="Remove fragments that match to more than one entity at the specific taxonomic level [%(default)s].")
@@ -143,7 +146,7 @@ def parse_accno(s, group=1):
 
 
 def parse_blat_output(filename, options):
-    """Parses blat output. Filters hits based on user critera. 
+    """Parses blat output. Filters out hits based on user critera. 
     
     Critera used for filtering is:
      options.identity
@@ -156,7 +159,7 @@ def parse_blat_output(filename, options):
     hit_counter = 0
     hits = {}
 
-    logging.info("Parsing hits from {}".format(filename))
+    logging.info("Parsing and performing absolute filtering of hits from {}".format(filename))
     with open(filename) as blast8:
         for line in blast8:
             blast8_line = line.split()
@@ -196,8 +199,30 @@ def parse_blat_output(filename, options):
 
     num_hits_remaining = sum(map(len, [hitlist for hitlist in hits.itervalues()]))
     logging.info("Parsed {} hits for {} fragments.".format(hit_counter, len(fragment_ids)))
-    logging.info("{} fragments with {} hits remain after filtering ({} hits were removed).".format(len(hits), num_hits_remaining, hit_counter-num_hits_remaining))
+    logging.info("{} fragments with {} hits remain after absolute filtering ({} hits were removed).".format(len(hits), num_hits_remaining, hit_counter-num_hits_remaining))
+    filter_relative(hits, options.identity_difference)
     return hits
+
+
+def filter_relative(hits, identity_difference):
+    """Perform relative filtering for each fragment.
+
+    Removes hits from each fragment's hitlist that have identity less
+    than max(hitlist)-identity_difference.
+    Modifies hits in place!
+    """
+
+    logging.info("Performing relative filtering on hits for each fragment...")
+    num_removals = 0
+    for fragment, hitlist in hits.iteritems():
+        highest_identity = max(hitlist, key=lambda hit: hit.identity).identity
+        startlen = len(hitlist)
+        hitlist = [hit for hit in hitlist if hit.identity >= highest_identity-identity_difference]
+        postlen = len(hitlist)
+        num_removals += startlen - postlen
+        logging.log(0, "Relative filtering of hitlist for fragment {} removed {} out of {} hits. {} hits remain".format(fragment, startlen-postlen, startlen, postlen))
+        hits[fragment] = hitlist
+    logging.info("{} hits were removed by relative filtering criteria.".format(num_removals))
 
 
 def informative_fragment(hitlist, tree, taxonomic_rank):
