@@ -7,7 +7,7 @@
 from __future__ import division
 from sys import argv, exit
 from collections import namedtuple
-from multiprocessing import Pool
+from multiprocessing import Pool, Process, Queue
 import time
 import operator
 import cPickle
@@ -292,6 +292,7 @@ def filter_parallel(fragment_hitlist):
     """
 
     fragment_id, hitlist = fragment_hitlist
+    global tree
 
     if options.remove_nondiscriminative:
         if not informative_fragment(hitlist, tree, options.taxonomic_rank):
@@ -393,21 +394,21 @@ def write_top_n_hits(outfilehandle, tree, taxonomic_rank, totalhits, n=10, walk=
         outfilehandle.write("Nothing filtered through at {} level.".format(taxonomic_rank))
 
 
-def load_taxtree(taxtree_pickle, taxdumpdir, id_gi_accno_pickle, rebase):
+def load_taxtree_bg(queue, taxtree_pickle, taxdumpdir, id_gi_accno_pickle, rebase):
     """Determine if previous taxtree_pickle is available and load it, otherwise create new.
     """
     if os.path.isfile(taxtree_pickle):
-        logging.debug("Found taxtree pickle '{}', loading...".format(taxtree_pickle))
+        logging.debug("Found taxtree pickle '{}', loading in background...".format(taxtree_pickle))
         with open(taxtree_pickle, 'rb') as pickled_tree:
             tree = cPickle.load(pickled_tree)
         logging.debug("Taxtree pickle '{}' loaded.".format(taxtree_pickle))
     else:
-        logging.debug("Found no pickled taxtree called '{}', creating one from scratch.".format(taxtree_pickle))
+        logging.debug("Found no pickled taxtree called '{}', creating one from scratch in background.".format(taxtree_pickle))
         tree = taxtree.load_ncbi_tree_from_taxdump(taxdumpdir, id_gi_accno_pickle, rebase=rebase)
         with open(taxtree_pickle, 'wb') as picklejar:
             cPickle.dump(tree, picklejar, -1)
         logging.debug("Pickled taxtree to '{}'.".format(taxtree_pickle))
-    return tree
+    queue.put(tree)
 
 
 def load_gene_info(gene_info_file):
@@ -479,11 +480,11 @@ def write_gene_counts(outfilehandle, gene_counts, gene_info, maxprint=50, sort=T
     outfilehandle.write("Printed {} out of {} hit annotated regions.\n".format(printcounter, len(counts)))
 
 
-def load_annotation(annotation_pickle):
+def load_annotation_bg(queue, annotation_pickle):
     """Loads annotation from previously prepared gff info pickle.
     """
 
-    logging.debug("Loading annotations from {}".format(annotation_pickle))
+    logging.debug("Loading annotations from '{}' in background...".format(annotation_pickle))
     with open(annotation_pickle, 'rb') as pkl:
         annotation = cPickle.load(pkl)
         if len(annotation) == 0:
@@ -491,10 +492,10 @@ def load_annotation(annotation_pickle):
             logging.error(errorstring)
             raise IOError(errorstring)
     logging.debug("Annotations for {} genes loaded.".format(len(annotation)))
-    return annotation
+    queue.put(annotation)
 
 
-def write_results(filename, tree, hits, filtered_hits, totalhits, annotation, options):
+def write_results(filename, tree, hits, filtered_hits, totalhits, gene_info, annotation, options):
     """Write results to file.
     """
 
@@ -524,11 +525,29 @@ def write_results(filename, tree, hits, filtered_hits, totalhits, annotation, op
             write_gene_counts(outfile, gene_counts, gene_info, options.maxprint)
 
 
-def main(filename, tree, options):
+def main(filename, options):
     """Main function that runs the complete pipeline logic.
     """
 
+    tree_queue = Queue()
+    gene_info_queue = Queue()
+    annotation_queue = Queue()
+    bg_tree_loader = Process(target=load_taxtree_bg, args=(tree_queue, 
+        options.taxtree_pickle, options.taxdumpdir, options.id_gi_accno_pickle, options.rebase_tree))
+    bg_gene_info_loader = Process(target=load_gene_info_bg, args=(gene_info_queue, options.gene_info_file))
+    bg_annotation_loader = Process(target=load_annotation_bg, args=(annotation_queue, options.accno_annotation_pickle))
+
+    logging.debug("Started background loading of taxtree, gene_info, and annotations...")
+    bg_tree_loader.start()
+    bg_gene_info_loader.start()
+    bg_annotation_loader.start()
+
     hits = parse_blat_output(filename, options)
+    
+    global tree # Must be global for multiprocessing in filter_hits
+    tree = tree_queue.get()
+    bg_tree_loader.join()
+
     discriminative_hits = filter_hits(hits, tree, options)
     totalhits = sum(map(len, [hits for hits in discriminative_hits.itervalues()]))
 
@@ -541,7 +560,13 @@ def main(filename, tree, options):
     insert_hits_into_tree(tree, discriminative_hits)
     sum_up_the_tree(tree)
 
-    write_results(filename, tree, hits, discriminative_hits, totalhits, annotation, options)
+    # Join remaining background loaders before writing results
+    gene_info = gene_info_queue.get()
+    annotation = annotation_queue.get()
+    bg_gene_info_loader.join()
+    bg_annotation_loader.join()
+
+    write_results(filename, tree, hits, discriminative_hits, totalhits, gene_info, annotation, options)
 
 
 if __name__ == "__main__":
@@ -551,10 +576,5 @@ if __name__ == "__main__":
     if options.interactive:
         exit()
 
-    tree = load_taxtree(options.taxtree_pickle, options.taxdumpdir, 
-            options.id_gi_accno_pickle, options.rebase_tree)
-    gene_info = load_gene_info(options.gene_info_file)
-    annotation = load_annotation(options.accno_annotation_pickle)
-
     for filename in options.FILE:
-        main(filename, tree, options)
+        main(filename, options)
