@@ -115,7 +115,7 @@ def load_ncbi_tree_from_taxdump(dumpdir, taxid_gi_accno_pickle, rebase=0, return
             n.gi = []
             n.accno = []
             n.score = -1
-            n.discriminative_fragments = -1
+            n.discriminative_fragments = 0
             n.count = 0
             try:
                 n.gi = [gi_accno_tuple[0] for gi_accno_tuple in taxid2gi_accno[n.name]]

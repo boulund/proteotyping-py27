@@ -386,6 +386,8 @@ def filter_hits(hits, tree, options):
 def insert_hits_into_tree(tree, discriminative_hits):
     """Updates counts on nodes in-place.
     """
+
+    logging.info("Inserting hits into taxonomic tree...")
     count_per_accno = {}
     fragments_per_taxid = {}
     for fragment_id, hitlist_taxid_tuple in discriminative_hits.iteritems():
@@ -397,17 +399,26 @@ def insert_hits_into_tree(tree, discriminative_hits):
         try:
             fragments_per_taxid[hitlist_taxid_tuple[1]] += 1
         except KeyError:
-            fragments_per_taxid[hitlist_taxid_tuple[1]] = 0
+            fragments_per_taxid[hitlist_taxid_tuple[1]] = 1
     accnos = set(count_per_accno.keys())
     taxids = set(fragments_per_taxid.keys())
     for node in tree.traverse():
         for accno in node.accno:
             if accno in accnos:
                 node.count += count_per_accno[accno] 
+                accnos.remove(accno)
                 logging.log(0, "Updated count of node {} with accno {} to {}.".format(node.name, accno, node.count))
         if node.name in taxids:
             node.discriminative_fragments += fragments_per_taxid[node.name]
+            taxids.remove(node.name)
             logging.debug("Updated number of discriminative fragments of node {} to {}.".format(node.name, fragments_per_taxid[node.name]))
+    if len(accnos) > 0:
+        logging.warning("Hit counts for accnos {} weren't inserted into the tree!".format(accnos))
+    if len(taxids) > 0:
+        logging.warning("Discriminative fragments for taxids weren't inserted in the tree!".format(taxids))
+
+    logging.info("Finished inserting hits into tree.")
+
 
 
 def sum_up_the_tree(tree):
@@ -434,6 +445,7 @@ def count_annotation_hits(discriminative_hits, annotation):
     """Annotates hits to determine what genes were hit.
     """
 
+    logging.info("Counting hits to annotated regions...")
     missing_annotation = set()
     gene_counts = {}
     for hitlist, _ in discriminative_hits.itervalues():
@@ -451,6 +463,7 @@ def count_annotation_hits(discriminative_hits, annotation):
                 missing_annotation.add(accno)
     if missing_annotation:
         logging.warning("Couldn't find annotation for:\n{}.".format("\n".join(missing_annotation)))
+    logging.info("Finished counting hits to annotated regions.")
     return gene_counts
 
 
@@ -528,11 +541,16 @@ def write_results(filename, tree, discriminative_hits, num_discriminative_fragme
         gene_counts = count_annotation_hits(discriminative_hits, annotation)
         outfile.write("Annotated regions hit by discriminative fragments:\n")
         write_gene_counts(outfile, gene_counts, gene_info, options.maxprint)
+    logging.info("Finished writing results.")
 
 
 def main(filename, options):
     """Main function that runs the complete pipeline logic.
     """
+    if options.interactive:
+        global discriminative_hits
+        global gene_info
+        global annotation
 
     # Setup background loading of tree, gene_info, and annotation
     tree_queue = Queue()
@@ -564,7 +582,7 @@ def main(filename, options):
                 logging.log(0,"  {} {}".format(fragment, hit))
 
     insert_hits_into_tree(tree, discriminative_hits)
-    sum_up_the_tree(tree)
+    #sum_up_the_tree(tree) # Not used for discriminative hits at taxonomic rank.
 
     # Join remaining background loaders before writing results
     gene_info = gene_info_queue.get()
@@ -574,10 +592,6 @@ def main(filename, options):
 
     write_results(filename, tree, discriminative_hits, num_discriminative_fragments, gene_info, annotation, options)
 
-    if options.interactive:
-        global discriminative_hits
-        global gene_info
-        global annotation
 
 
 if __name__ == "__main__":
