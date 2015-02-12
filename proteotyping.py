@@ -169,6 +169,8 @@ def parse_blat_output(filename, options):
             if fragment_id not in fragment_ids:
                 fragment_ids.add(fragment_id)
             hit_counter += 1
+            if hit_counter % 1000000 == 0:
+                logging.debug("Parsed {} hits...".format(hit_counter))
 
             target_accno = parse_accno(blast8_line[1])
             mapping = "{}::{}".format(fragment_id, target_accno)
