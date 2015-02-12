@@ -79,9 +79,6 @@ def parse_commandline(argv):
     parser.add_argument("--print_all_hit_annotations", dest="print_all_hit_annotations", action="store_true",
             default=False,
             help="Print a listing of all hit annotations (and not only hits from filtered peptide fragments) [%(default)s].")
-    parser.add_argument("--interactive", dest="interactive", action="store_true",
-            default=False,
-            help="Load all heavy stuff and then run interactively [%(default)s].")
     parser.add_argument("--output", dest="output",
             default="",
             help="Write results to this filename [results/FILE.results].")
@@ -100,6 +97,9 @@ def parse_commandline(argv):
     devoptions.add_argument("--numCPUs", dest="numCPUs", type=int,
             default=16,
             help="Number of CPUs to utilize in parallel regions [%(default)s].")
+    devoptions.add_argument("--interactive", dest="interactive", action="store_true",
+            default=False,
+            help="Read everything into the namespace but do nothing. Useful for IPython settions [%(default)s].")
 
     if len(argv) < 2:
         parser.print_help()
@@ -492,56 +492,6 @@ def load_annotation(annotation_pickle):
     return annotation
 
 
-def wait_for_user_input(options):
-    """Read input from terminal.
-    """
-
-    instructions = """
-Ran with options: l: {}, c: {:2.2f}, i: {}, r: {}
-Enter options to change filtering criteria and run again:
- fragment (l)ength, (i)dentity, fragment (c)overage, (r)emove noninformative.
- Some options can be combined with numbers, e.g. 'l 10' changes the filtering length to 10.
- Separate multiple options with ','.
- Type 'q' and press enter to quit.
-Input: """.format(options.fragment_length, options.fragment_coverage, options.identity, options.remove_nondiscriminative)
-    try:
-        user_input = raw_input(instructions)
-        for param in [a.strip() for a in user_input.split(",")]:
-            if param.lower().startswith("l"):
-                try:
-                    options.fragment_length = int(param.split()[1])
-                except ValueError:
-                    print "ERROR: Cannot parse fragment length Try again."
-                    return wait_for_user_input(options)
-            elif param.lower().startswith("i"):
-                try:
-                    options.identity = float(param.split()[1])
-                except ValueError:
-                    print "ERROR: Cannot parse identity. Try again."
-                    return wait_for_user_input(options)
-            elif param.lower().startswith("c"):
-                try:
-                    options.fragment_coverage = float(param.split()[1])
-                except ValueError:
-                    print "ERROR: Cannot parse fragment coverage. Try again."
-                    return wait_for_user_input(options)
-            elif param.lower().startswith("r"):
-                options.remove_nondiscriminative = not options.remove_nondiscriminative
-            elif param.lower().startswith("q"):
-                print "User exited."
-                exit()
-            else:
-                print "ERROR: Option not recognized, try again."
-                return wait_for_user_input(options)
-        return options
-    except KeyboardInterrupt:
-        print "\nUser exited through Ctrl+C."
-        exit()
-    except EOFError:
-        print "\nUser exited through Ctrl+D."
-        exit()
-
-
 def write_results(filename, tree, hits, filtered_hits, totalhits, annotation, options):
     """Write results to file.
     """
@@ -596,18 +546,13 @@ if __name__ == "__main__":
 
     options = parse_commandline(argv)
 
+    if options.interactive:
+        exit()
+
     tree = load_taxtree(options.taxtree_pickle, options.taxdumpdir, 
             options.id_gi_accno_pickle, options.rebase_tree)
     gene_info = load_gene_info(options.gene_info_file)
     annotation = load_annotation(options.accno_annotation_pickle)
 
-    if options.interactive:
-        while True:
-            reset_tree(tree)
-            for filename in options.FILE:
-                main(filename, tree, options)
-            options = wait_for_user_input(options)
-    else:
-        for filename in options.FILE:
-            main(filename, tree, options)
-            reset_tree(tree)
+    for filename in options.FILE:
+        main(filename, tree, options)
