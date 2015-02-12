@@ -161,34 +161,39 @@ def parse_blat_output(filename, options):
         for line in blast8:
             blast8_line = line.split()
             fragment_id = blast8_line[0]
-            target_accno = parse_accno(blast8_line[1])
-            identity = float(blast8_line[2])
-            matches = int(blast8_line[3])
-            mismatches = int(blast8_line[4])
-            startpos = int(blast8_line[8])
-            endpos = int(blast8_line[9])
-            fragment_length = int(fragment_id.split()[0].split("_")[-1])
-            fragment_coverage = matches/fragment_length
-
-            # Filter hits based on user critera
-            mapping = "{}::{}".format(fragment_id, target_accno)
-            if identity >= options.identity:
-                logging.log(0, "  {} passed identity.".format(mapping))
-                if fragment_length >= options.fragment_length:
-                    logging.log(0, "  {} passed fragment length.".format(mapping))
-                    if fragment_coverage >= options.fragment_coverage:
-                        logging.log(0, "  {} passed fragment coverage.".format(mapping))
-                        hit = Hit(target_accno, identity, matches, mismatches, 
-                                  0, startpos, endpos, fragment_length, fragment_coverage)
-                        try:
-                            hits[fragment_id].append(hit)
-                        except KeyError:
-                            hits[fragment_id] = [hit]
 
             # Fragment and hit counting logic
             if fragment_id not in fragment_ids:
                 fragment_ids.add(fragment_id)
             hit_counter += 1
+
+            target_accno = parse_accno(blast8_line[1])
+            mapping = "{}::{}".format(fragment_id, target_accno)
+
+            identity = float(blast8_line[2])
+            if identity < options.identity:
+                logging.log(0, "  {} passed identity.".format(mapping))
+                continue
+            matches = int(blast8_line[3])
+            mismatches = int(blast8_line[4])
+            startpos = int(blast8_line[8])
+            endpos = int(blast8_line[9])
+            fragment_length = int(fragment_id.split()[0].split("_")[-1])
+            if fragment_length < options.fragment_length:
+                logging.log(0, "  {} passed fragment length.".format(mapping))
+                continue
+            fragment_coverage = matches/fragment_length
+            if fragment_coverage < options.fragment_coverage:
+                logging.log(0, "  {} passed fragment coverage.".format(mapping))
+                continue
+
+            hit = Hit(target_accno, identity, matches, mismatches, 
+                      0, startpos, endpos, fragment_length, fragment_coverage)
+            try:
+                hits[fragment_id].append(hit)
+            except KeyError:
+                hits[fragment_id] = [hit]
+
     num_hits_remaining = sum(map(len, [hitlist for hitlist in hits.itervalues()]))
     logging.info("Parsed {} hits for {} fragments.".format(hit_counter, len(fragment_ids)))
     logging.info("{} fragments with {} hits remain after filtering ({} hits were removed).".format(len(hits), num_hits_remaining, hit_counter-num_hits_remaining))
