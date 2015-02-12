@@ -411,7 +411,7 @@ def load_taxtree_bg(queue, taxtree_pickle, taxdumpdir, id_gi_accno_pickle, rebas
     queue.put(tree)
 
 
-def load_gene_info(gene_info_file):
+def load_gene_info_bg(queue, gene_info_file):
     """Reads NCBI gene_info a dictionary for geneID lookups.
     """
     gene_info = {}
@@ -428,7 +428,7 @@ def load_gene_info(gene_info_file):
             desc = info[8]
             gene_info[geneID] = (symbol, desc, taxid)
     logging.debug("Gene info for {} genes loaded.".format(len(gene_info)))
-    return gene_info
+    queue.put(gene_info)
 
 
 def count_annotation_hits(hits, annotation):
