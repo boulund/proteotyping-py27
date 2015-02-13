@@ -418,15 +418,17 @@ def sum_up_the_tree(tree):
 def reset_tree(tree):
     """Resets counts on all nodes for use in interactive mode.
     """
+    logging.debug("Resetting tree")
     for node in tree.traverse():
         node.count = 0
+        node.discriminative_fragments = 0
 
 
 def count_annotation_hits(discriminative_hits, annotation):
     """Annotates hits to determine what genes were hit.
     """
 
-    logging.info("Counting hits to annotated regions...")
+    logging.debug("Counting hits to annotated regions...")
     missing_annotation = set()
     gene_counts = {}
     for hitlist, _ in discriminative_hits.itervalues():
@@ -444,7 +446,7 @@ def count_annotation_hits(discriminative_hits, annotation):
                 missing_annotation.add(accno)
     if missing_annotation:
         logging.warning("Couldn't find annotation for:\n{}.".format("\n".join(missing_annotation)))
-    logging.info("Finished counting hits to annotated regions.")
+    logging.debug("Finished counting hits to annotated regions.")
     return gene_counts
 
 
@@ -528,30 +530,29 @@ def write_results(filename, tree, discriminative_hits, num_discriminative_fragme
 def main(filename, options):
     """Main function that runs the complete pipeline logic.
     """
-    if options.interactive:
-        global discriminative_hits
-        global gene_info
-        global annotation
+    global FIRST_RUN
+    global tree # Must be global for multiprocessing in filter_hits
 
-    # Setup background loading of tree, gene_info, and annotation
-    tree_queue = Queue()
-    gene_info_queue = Queue()
-    annotation_queue = Queue()
-    bg_tree_loader = Process(target=load_taxtree_bg, args=(tree_queue, 
-        options.taxtree_pickle, options.taxdumpdir, options.id_gi_accno_pickle, options.rebase_tree))
-    bg_gene_info_loader = Process(target=load_gene_info_bg, args=(gene_info_queue, options.gene_info_file))
-    bg_annotation_loader = Process(target=load_annotation_bg, args=(annotation_queue, options.accno_annotation_pickle))
+    if FIRST_RUN:
+        # Start background loading of tree, gene_info, and annotation
+        tree_queue = Queue()
+        gene_info_queue = Queue()
+        annotation_queue = Queue()
+        bg_tree_loader = Process(target=load_taxtree_bg, args=(tree_queue, 
+            options.taxtree_pickle, options.taxdumpdir, options.id_gi_accno_pickle, options.rebase_tree))
+        bg_gene_info_loader = Process(target=load_gene_info_bg, args=(gene_info_queue, options.gene_info_file))
+        bg_annotation_loader = Process(target=load_annotation_bg, args=(annotation_queue, options.accno_annotation_pickle))
 
-    logging.debug("Started background loading of taxtree, gene_info, and annotations...")
-    bg_tree_loader.start()
-    bg_gene_info_loader.start()
-    bg_annotation_loader.start()
+        logging.debug("Started background loading of taxtree, gene_info, and annotations...")
+        bg_tree_loader.start()
+        bg_gene_info_loader.start()
+        bg_annotation_loader.start()
 
     hits = parse_blat_output(filename, options)
-    
-    global tree # Must be global for multiprocessing in filter_hits
-    tree = tree_queue.get()
-    bg_tree_loader.join()
+
+    if FIRST_RUN:
+        tree = tree_queue.get()
+        bg_tree_loader.join()
 
     if options.remove_nondiscriminative:
         discriminative_hits = filter_hits(hits, tree, options)
@@ -569,14 +570,19 @@ def main(filename, options):
     insert_hits_into_tree(tree, discriminative_hits)
     #sum_up_the_tree(tree) # Not used for discriminative hits at taxonomic rank.
 
-    # Join remaining background loaders before writing results
-    gene_info = gene_info_queue.get()
-    annotation = annotation_queue.get()
-    bg_gene_info_loader.join()
-    bg_annotation_loader.join()
+    if FIRST_RUN:
+        # Join remaining background loaders before writing results
+        gene_info = gene_info_queue.get()
+        annotation = annotation_queue.get()
+        bg_gene_info_loader.join()
+        bg_annotation_loader.join()
+    else:
+        global gene_info
+        global annotation
 
     write_results(filename, tree, discriminative_hits, num_discriminative_fragments, gene_info, annotation, options)
-
+    FIRST_RUN = False
+    return tree, hits, discriminative_hits, gene_info, annotation
 
 
 if __name__ == "__main__":
@@ -586,5 +592,7 @@ if __name__ == "__main__":
     if options.interactive:
         exit()
 
+    FIRST_RUN = True
     for filename in options.FILE:
         main(filename, options)
+        reset_tree(tree)
