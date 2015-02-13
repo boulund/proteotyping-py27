@@ -181,7 +181,7 @@ def parse_blat_output(filename, options):
     num_hits_remaining = sum(map(len, [hitlist for hitlist in hits.itervalues()]))
     logging.info("Parsed {} hits for {} fragments.".format(hit_counter, len(fragment_ids)))
     logging.info("{} fragments with {} hits remain after absolute filtering ({} hits were removed).".format(len(hits), num_hits_remaining, hit_counter-num_hits_remaining))
-    filter_relative(hits, options.identity_difference)
+    hits = filter_relative(hits, options.identity_difference)
     return hits
 
 
@@ -250,12 +250,13 @@ def filter_relative(hits, identity_difference):
     for fragment, hitlist in hits.iteritems():
         highest_identity = max(hitlist, key=lambda hit: hit.identity).identity
         startlen = len(hitlist)
-        hitlist = [hit for hit in hitlist if hit.identity >= highest_identity-identity_difference]
+        hitlist = [hit for hit in hitlist if hit.identity >= (highest_identity-identity_difference)]
         postlen = len(hitlist)
         num_removals += startlen - postlen
-        logging.log(0, "Relative filtering of hitlist for fragment {} removed {} out of {} hits. {} hits remain".format(fragment, startlen-postlen, startlen, postlen))
+        #logging.log(0, "Relative filtering of hitlist for fragment {} removed {} out of {} hits. {} hits remain".format(fragment, startlen-postlen, startlen, postlen)) #VERBOSE
         hits[fragment] = hitlist
     logging.info("{} hits were removed by relative filtering criteria.".format(num_removals))
+    return hits
 
 
 def informative_fragment(hitlist, tree, taxonomic_rank):
@@ -272,13 +273,14 @@ def informative_fragment(hitlist, tree, taxonomic_rank):
     Returns False otherwise.
     """
     
+    
     if len(hitlist) > 0:
         hit_node = taxtree.search_for_accno(tree, hitlist[0].target_accno)
         if len(hit_node) > 1:
             logging.warning("Found more than one node for target accno {}".format(hitlist[0].target_accno))
     else:
         logging,warning("Empty hitlist! (This should never happen)".format(hitlist))
-        return False
+        return (False, 0)
 
     if hit_node:
         logging.debug("Found hit to node {}.".format(hit_node[0].name))
@@ -293,7 +295,7 @@ def informative_fragment(hitlist, tree, taxonomic_rank):
                 ancestor = ancestors[0]
             except:
                 logging.warning("Found no ancestor of correct rank")
-                return False
+                return (False, 0)
         logging.debug("Found ancestor {} at rank '{}'.".format(ancestor.name, ancestor.rank))
         child_nodes = set()
         for descendant in ancestor.get_descendants():
@@ -301,12 +303,13 @@ def informative_fragment(hitlist, tree, taxonomic_rank):
                 child_nodes.add(accno)
     else:
         logging.warning("Found no node in the tree for {}.".format(hitlist[0].target_accno))
-        return False
+        return (False, 0)
+
 
     for hit in hitlist:
         if hit.target_accno not in child_nodes:
             logging.log(0, "{} was not found in {}".format(hit.target_accno, child_nodes))
-            return False
+            return (False, 0)
     logging.debug("All hits hit under the same taxonomic level, informative fragment!")
     logging.debug("Informative fragment for {} hits to {}".format(ancestor.taxname, hit_node[0].taxname))
     logging.log(0, "  Informative hits to {}".format(" ".join([hit.target_accno for hit in hitlist])))
@@ -325,18 +328,19 @@ def filter_parallel(fragment_hitlist):
     Returns None if fragment is not informative.
     """
 
-    global tree
     fragment_id, hitlist = fragment_hitlist
 
     informative, taxid = informative_fragment(hitlist, tree, options.taxonomic_rank)
-    if not informative:
+    if informative:
+        # Commented out for performance reasons.
+        #if logging.getLogger().getEffectiveLevel() < 20:
+        #    logging.log(0, "Fragment {} is informative with hits to:".format(fragment_id))
+        #    for hit in hitlist:
+        #        logging.log(0, "  {}".format(hit.target_accno))
+        return (fragment_id, hitlist, taxid)
+    else:
         logging.debug("Fragment {} is not informative".format(fragment_id))
-        return 
-    if logging.getLogger().getEffectiveLevel() < 20:
-        logging.log(0, "Fragment {} is informative with hits to:".format(fragment_id))
-        for hit in hitlist:
-            logging.log(0, "  {}".format(hit.target_accno))
-    return (fragment_id, hitlist, taxid)
+        return ()
 
 
 def filter_hits(hits, tree, options): 
@@ -353,7 +357,7 @@ def filter_hits(hits, tree, options):
     # Merge all results
     filtered_hits = {}
     for result in result_list:
-        if result is not None:
+        if result:
             fragment_id, filtered_hitlist, taxid = result
             filtered_hits[fragment_id] = (filtered_hitlist, taxid)
 
@@ -408,6 +412,7 @@ def sum_up_the_tree(tree):
     In the end, root node.count should be the same as the total number of
     counts in the tree when starting out.
     """
+    logging.debug("Summing up hits in the tree")
     for leaf in tree.get_leaves(): #(is_leaf_fn=lambda n: n.count > 0):
         lineage = leaf.get_ancestors()
         lineage.insert(0, leaf)
@@ -532,6 +537,8 @@ def main(filename, options):
     """
     global FIRST_RUN
     global tree # Must be global for multiprocessing in filter_hits
+    global gene_info
+    global annotation
 
     if FIRST_RUN:
         # Start background loading of tree, gene_info, and annotation
@@ -542,7 +549,6 @@ def main(filename, options):
             options.taxtree_pickle, options.taxdumpdir, options.id_gi_accno_pickle, options.rebase_tree))
         bg_gene_info_loader = Process(target=load_gene_info_bg, args=(gene_info_queue, options.gene_info_file))
         bg_annotation_loader = Process(target=load_annotation_bg, args=(annotation_queue, options.accno_annotation_pickle))
-
         logging.debug("Started background loading of taxtree, gene_info, and annotations...")
         bg_tree_loader.start()
         bg_gene_info_loader.start()
@@ -552,12 +558,15 @@ def main(filename, options):
 
     if FIRST_RUN:
         tree = tree_queue.get()
+        logging.debug("Got tree from subprocess.")
         bg_tree_loader.join()
+        bg_tree_loader.terminate()
+        logging.debug("Tree background loader subprocess terminated.")
 
     if options.remove_nondiscriminative:
         discriminative_hits = filter_hits(hits, tree, options)
     else:
-        logging.debug("Not removing non-discriminative hits.")
+        logging.info("Not removing non-discriminative hits.")
         discriminative_hits = hits
     num_discriminative_fragments = len(discriminative_hits)
 
@@ -568,17 +577,20 @@ def main(filename, options):
                 logging.log(0,"  {} {}".format(fragment, hit))
 
     insert_hits_into_tree(tree, discriminative_hits)
-    #sum_up_the_tree(tree) # Not used for discriminative hits at taxonomic rank.
+    sum_up_the_tree(tree) # Not used for discriminative hits at taxonomic rank.
 
     if FIRST_RUN:
         # Join remaining background loaders before writing results
         gene_info = gene_info_queue.get()
+        logging.debug("Got gene_info from subprocess.")
         annotation = annotation_queue.get()
+        logging.debug("Got annotation from subprocess.")
         bg_gene_info_loader.join()
         bg_annotation_loader.join()
-    else:
-        global gene_info
-        global annotation
+        bg_gene_info_loader.terminate()
+        logging.debug("gene_info background loader subprocess terminated.")
+        bg_annotation_loader.terminate()
+        logging.debug("Annotation background loader subprocess terminated.")
 
     write_results(filename, tree, discriminative_hits, num_discriminative_fragments, gene_info, annotation, options)
     FIRST_RUN = False
