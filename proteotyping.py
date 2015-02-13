@@ -124,26 +124,6 @@ def parse_commandline(argv):
     return options
 
 
-def parse_accno(s, group=1):
-    """Parses the accession numbers (e.g. NC_001122.22) from a FASTA header string.
-    
-    User can chose to return either:
-        group=1: ACCESSION
-        group=2: ACCESSION.VERSION
-    """
-
-    # Regex finds e.g. NC_001122.1 in a FASTA header string
-    # such as "gi|158333233|ref|NC_009925.1|"
-    # hit.group(1) is whole accession number
-    # hit.group(2) is accession number without VERSION
-    ref_id_regex = re.compile(r"\|ref\|((\w{1,2}_[\d\w]+)\.\d{1,2})\|")
-    hit = re.search(ref_id_regex, s)
-    if hit is not None:
-        return hit.group(group)
-    else:
-        raise Exception("ERROR finding accession string in {}".format(s))
-
-
 def parse_blat_output(filename, options):
     """Parses blat output. Filters out hits based on user critera. 
     
@@ -168,15 +148,15 @@ def parse_blat_output(filename, options):
             if fragment_id not in fragment_ids:
                 fragment_ids.add(fragment_id)
             hit_counter += 1
-            if hit_counter % 1000000 == 0:
-                logging.debug("Parsed {} hits...".format(hit_counter))
+            #if hit_counter % 1000000 == 0:
+            #    logging.debug("Parsed {} hits...".format(hit_counter))
 
-            target_accno = parse_accno(blast8_line[1])
-            mapping = "{}::{}".format(fragment_id, target_accno)
+            target_accno = blast8_line[1].split("ref|")[1].split("|", 1)[0]
+            mapping = "" #"{}::{}".format(fragment_id, target_accno)
 
             identity = float(blast8_line[2])
             if identity < options.identity:
-                logging.log(0, "  {} passed identity.".format(mapping))
+                #logging.log(0, "  {} passed identity.".format(mapping))
                 continue
             matches = int(blast8_line[3])
             mismatches = int(blast8_line[4])
@@ -184,11 +164,11 @@ def parse_blat_output(filename, options):
             endpos = int(blast8_line[9])
             fragment_length = int(fragment_id.split()[0].split("_")[-1])
             if fragment_length < options.fragment_length:
-                logging.log(0, "  {} passed fragment length.".format(mapping))
+                #logging.log(0, "  {} passed fragment length.".format(mapping))
                 continue
             fragment_coverage = matches/fragment_length
             if fragment_coverage < options.fragment_coverage:
-                logging.log(0, "  {} passed fragment coverage.".format(mapping))
+                #logging.log(0, "  {} passed fragment coverage.".format(mapping))
                 continue
 
             hit = Hit(target_accno, identity, matches, mismatches, 
