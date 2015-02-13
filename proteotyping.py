@@ -345,18 +345,17 @@ def filter_parallel(fragment_hitlist):
     Returns None if fragment is not informative.
     """
 
-    fragment_id, hitlist = fragment_hitlist
     global tree
+    fragment_id, hitlist = fragment_hitlist
 
-    if options.remove_nondiscriminative:
-        informative, taxid = informative_fragment(hitlist, tree, options.taxonomic_rank)
-        if not informative:
-            logging.debug("Fragment {} is not informative".format(fragment_id))
-            return 
-        if logging.getLogger().getEffectiveLevel() < 20:
-            logging.log(0, "Fragment {} is informative with hits to:".format(fragment_id))
-            for hit in hitlist:
-                logging.log(0, "  {}".format(hit.target_accno))
+    informative, taxid = informative_fragment(hitlist, tree, options.taxonomic_rank)
+    if not informative:
+        logging.debug("Fragment {} is not informative".format(fragment_id))
+        return 
+    if logging.getLogger().getEffectiveLevel() < 20:
+        logging.log(0, "Fragment {} is informative with hits to:".format(fragment_id))
+        for hit in hitlist:
+            logging.log(0, "  {}".format(hit.target_accno))
     return (fragment_id, hitlist, taxid)
 
 
@@ -574,7 +573,11 @@ def main(filename, options):
     tree = tree_queue.get()
     bg_tree_loader.join()
 
-    discriminative_hits = filter_hits(hits, tree, options)
+    if options.remove_nondiscriminative:
+        discriminative_hits = filter_hits(hits, tree, options)
+    else:
+        logging.debug("Not removing non-discriminative hits.")
+        discriminative_hits = hits
     num_discriminative_fragments = len(discriminative_hits)
 
     if logging.getLogger().getEffectiveLevel() < 20:
