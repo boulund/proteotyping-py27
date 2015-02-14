@@ -99,7 +99,10 @@ def load_ncbi_tree_from_taxdump(dumpdir, taxid_gi_accno_pickle, rebase=0, return
     logging.debug("{:>10} synonyms loaded.".format(sum([len(c[1]) for c in synonyms.iteritems()])))
 
     logging.debug("Loading nodes...")
-    counter_inserted = 0
+    inserted_accnos = 0
+    inserted_gis = 0
+    nodes_with_insertions = 0
+    num_nodes_to_insert_gi_accno = len(taxid2gi_accno)
     with open(nodesdump) as f:
         for i, line in enumerate(f):
             if i%100000 == 0:
@@ -119,17 +122,19 @@ def load_ncbi_tree_from_taxdump(dumpdir, taxid_gi_accno_pickle, rebase=0, return
             n.count = 0
             try:
                 n.gi = [gi_accno_tuple[0] for gi_accno_tuple in taxid2gi_accno[n.name]]
+                inserted_gis += len(n.gi)
                 n.accno = [gi_accno_tuple[1] for gi_accno_tuple in taxid2gi_accno[n.name]]
-                #logging.debug("Inserted genome gi and accno into node {}".format(n.name))
-                counter_inserted += 1
+                inserted_accnos += len(n.accno)
+                taxid2gi_accno.pop(n.name, None) # Remove the key from the dict
+                nodes_with_insertions += 1
             except KeyError:
                 pass
             parent2child[nodename] = parentname
             name2node[nodename] = n
     logging.debug("{:>10} nodes loaded.".format(len(name2node)))
-    logging.debug("{:>10} genomes inserted into nodes.".format(counter_inserted))
-    if counter_inserted < len(taxid2gi_accno):
-        logging.warning("{:>10} gi and accno's were not inserted into the tree!".format(len(taxid2gi_accno)-counter_inserted))
+    logging.debug("Inserted {:>10} gi and {:>10} accnos into nodes.".format(inserted_gis, inserted_accnos))
+    if nodes_with_insertions < num_nodes_to_insert_gi_accno:
+        logging.warning("{:>10} nodes were not assigned their gi and accnos!".format(num_nodes_to_insert_gi_accno-nodes_with_insertions))
 
     logging.debug("Linking nodes...")
     for node in name2node:
