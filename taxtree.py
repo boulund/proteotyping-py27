@@ -159,11 +159,14 @@ def search_for_accno(tree, accno):
     """
     if isinstance(accno, list):
         result = []
-        for acession in accno:
-            result.append(search_for_accno(tree, acession)[0])        
+        for accession in accno:
+            result.append(search_for_accno(tree, accession)[0])        
         return result
     elif isinstance(accno, str):
-        return [node for node in tree.get_leaves(lambda n: bool(n.accno)) if accno in node.accno]
+        for node in tree.traverse():
+            if accno in node.accno:
+                return [node]
+        return []
     else:
         raise Exception("Can't search for {} of type {}.".format(accno, type(accno)))
 
