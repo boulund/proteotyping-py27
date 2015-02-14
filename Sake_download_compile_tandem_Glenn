@@ -20,7 +20,7 @@ compile tandem:
         tar -xf parallel_tandem_10-12-01-1.tgz;
         cd parallel_tandem_10-12-01-1/src;
         sed -i '15 s|.*|CXXFLAGS = -DOC -O2 -DGCC4 -DPLUGGABLE_SCORING -g -O2 -I/c3se/apps/Glenn/boost/1_49_0/include -I/c3se/apps/Glenn/openmpi/1.4.4/include -I/c3se/apps/Glenn/openmpi/1.4.4/include/openmpi|' Makefile;
-        sed -i '18 s|.*|LDFLAGS = -lpthread -L/c3se/apps/Glenn/boost/1_49_0/lib -lm -lexpat -lboost_serialization|' Makefile;
+        sed -i '18 s|.*|LDFLAGS = -lpthread -L/c3se/apps/Glenn/boost/1_49_0/lib -Wl,-rpath,/c3se/apps/Glenn/boost/1_49_0/lib -lm -lexpat -lboost_serialization|' Makefile;
         sed -i '227 s|.*|\n#include <stdio.h>\n#include <stdlib.h>\n#include <string.h>\n|' stdafx.h;
         make;
     output:
