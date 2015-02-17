@@ -220,6 +220,13 @@ if __name__ == "__main__":
         with open(options.id_gi_accno_pickle) as pkl:
             id_gi_accno = cPickle.load(pkl)
         logging.debug("Finished loading '{}' with {} mappings.".format(options.id_gi_accno_pickle, len(id_gi_accno)))
+        if options.id_gi_accno_mappings:
+            id_gi_accno = insert_additional_taxid_gi_accno_mappings(id_gi_accno, options.id_gi_accno_mappings)
+            tic = time.time()
+            logging.debug("Writing pickle to '{}'.".format(options.id_gi_accno_pickle))
+            with open(options.id_gi_accno_pickle, 'wb') as pkl:
+                cPickle.dump(id_gi_accno, pkl, -1) # Highest protocol available
+            logging.debug("Time to write pickle: {}.".format(time.time()-tic))
     else:
         # Regex identifies:
         #   NCBI gi numbers (digits)
@@ -238,14 +245,14 @@ if __name__ == "__main__":
         logging.debug("Finding taxid:gi mappings from {}...".format(options.TAXDUMP+"/gi_taxid_nucl.dmp"))
         id_gi_accno = filter_GIs_from_dmp_to_pickle(options.TAXDUMP, gi_accno)
         logging.debug("Identified {} taxid:gi,accno mappings in {} seconds.".format(len(id_gi_accno.keys()), time.time()-tic))
+        if options.id_gi_accno_mappings:
+            id_gi_accno = insert_additional_taxid_gi_accno_mappings(id_gi_accno, options.id_gi_accno_mappings)
         tic = time.time()
         logging.debug("Writing pickle to '{}'.".format(options.id_gi_accno_pickle))
         with open(options.id_gi_accno_pickle, 'wb') as pkl:
             cPickle.dump(id_gi_accno, pkl, -1) # Highest protocol available
         logging.debug("Time to write pickle: {}.".format(time.time()-tic))
 
-    if options.id_gi_accno_mappings:
-        id_gi_accno = insert_additional_taxid_gi_accno_mappings(id_gi_accno, options.id_gi_accno_mappings)
 
     if os.path.isfile(options.accno_annotation_pickle):
         logging.debug("Found previous '{}', skipping accno_annotation pickle creation.".format(options.accno_annotation_pickle))
