@@ -97,13 +97,12 @@ def filter_GIs_from_dmp_to_pickle(gi_taxid_dmp, gi_accno):
     if not os.path.isfile(gi_taxid_dmp):
         raise IOError("Taxdump file {} not found.".format(gi_taxid_dmp))
     with open(gi_taxid_dmp) as f:
-        gis = set(gi_accno.keys())
         taxid_gi_accno = {}
         inserted_counter = 0
         for line in f:
             gi, taxid = line.split()
             gi = int(gi)
-            if gi in gis:
+            if gi in gi_accno:
                 try:
                     taxid_gi_accno[taxid].append((gi, gi_accno[gi]))
                     logging.debug("Taxid {} is now associated with {} GIs: ({}).".format(taxid, 
@@ -111,11 +110,11 @@ def filter_GIs_from_dmp_to_pickle(gi_taxid_dmp, gi_accno):
                 except KeyError:
                     taxid_gi_accno[taxid] = [(gi, gi_accno[gi])]
                 inserted_counter += 1
-                gis.remove(gi)
+                gi_accno.pop(gi, None)
     logging.debug("Inserted {} GIs into {} taxids".format(inserted_counter, len(taxid_gi_accno.keys())))
-    logging.debug("Found no taxid:gi mapping for {} GIs:".format(len(gis)))
-    for gi in gis:
-        logging.debug("{:>10}".format(gi))
+    logging.debug("Found no taxid:gi mapping for {} GIs:".format(len(gi_accno)))
+    for gi, accno in gi_accno.iteritems():
+        logging.debug("{:>10} {:>10}".format(gi, accno))
     return taxid_gi_accno
 
 
@@ -139,6 +138,28 @@ def parse_gi_accno_from_headers(header, gi_accno_regex):
         return (int(hit.group(1)), hit.group(2))
     else:
         raise Exception("Couldn't parse GI, accno from {}.".format(header))
+
+
+def insert_additional_taxid_gi_accno_mappings(id_gi_accno, id_gi_accno_mappings):
+    """Insert additional taxid_gi_accno mappings
+
+    This can be used to include other genomes or reference sequences not present in
+    NCBI bacterial.
+    """
+
+    with open(options.id_gi_accno_mappings) as f:
+        logging.debug("Reading {} to insert additional taxid:gi:accno mappings".format(id_gi_accno_mappings))
+        extracounter = 0
+        for line in f:
+            taxid, gi, accno = line.split()
+            try:
+                id_gi_accno[taxid].append((int(gi), accno))
+            except KeyError:
+                id_gi_accno[taxid] = [(int(gi), accno)]
+            extracounter += 1
+    logging.debug("Inserted {} additional taxid:gi:accno mappings".format(extracounter))
+
+    return id_gi_accno
 
 
 def parse_commandline(argv):
@@ -224,16 +245,7 @@ if __name__ == "__main__":
         logging.debug("Time to write pickle: {}.".format(time.time()-tic))
 
     if options.id_gi_accno_mappings:
-        with open(options.id_gi_accno_mappings) as f:
-            extracounter = 0
-            for line in f:
-                taxid, gi, accno = line.split()
-                try:
-                    id_gi_accno[taxid].append((int(gi), accno))
-                except KeyError:
-                    id_gi_accno[taxid] = [(int(gi), accno)]
-                extracounter += 1
-        logging.debug("Inserted {} additional taxid:gi:accno mappings".format(extracounter))
+        id_gi_accno = insert_additional_taxid_gi_accno_mappings(id_gi_accno, options.id_gi_accno_mappings)
 
     if os.path.isfile(options.accno_annotation_pickle):
         logging.debug("Found previous '{}', skipping accno_annotation pickle creation.".format(options.accno_annotation_pickle))
