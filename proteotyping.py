@@ -38,24 +38,15 @@ def parse_commandline(argv):
     parser.add_argument("-d", dest="display", type=int, metavar="N",
             default=10,
             help="Number of results to display [%(default)s].")
-    parser.add_argument("--taxdumpdir", dest="taxdumpdir", metavar="DIR",
-            default="/shared/db/NCBI/taxonomy/taxdump/",
-            help="Path to NCBI Taxonomy dump folder (must contain 'names.dmp', 'nodes.dmp' [%(default)s].")
-    parser.add_argument("--id_gi_accno_pickle", dest="id_gi_accno_pickle", metavar="FILE",
-            default="id_gi_accno.pkl",
-            help="Filename of ID_GI_ACCNO pickle [%(default)s].")
     parser.add_argument("--accno_annotation_pickle", dest="accno_annotation_pickle", metavar="FILE",
             default="accno_annotation.pkl",
-            help="Filename of ID_GI_ACCNO pickle [%(default)s].")
+            help="Filename of accno_annotation pickle [%(default)s].")
     parser.add_argument("--taxtree_pickle",  dest="taxtree_pickle", metavar="FILE",
             default="taxtree.pkl",
             help="Filename of pickled previously constructed taxtree to load instead of making it from scratch [%(default)s].")
     parser.add_argument("--gene_info", dest="gene_info_file", metavar="FILE",
             default="/shared/db/NCBI/gene/gene_info",
             help="NCBI 'gene_info' file [%(default)s].")
-    parser.add_argument("--rebase_tree", dest="rebase_tree", metavar="S", type=str,
-            default="2", 
-            help="Rebase the taxonomic tree to this node (taxid). Only applicable when creating tree from scratch [%(default)s].")
     parser.add_argument("--taxonomic_rank", dest="taxonomic_rank", metavar="LVL", type=str,
             choices=["no rank", "subspecies", "species", "genus", "family", "order", "class", "phylum", "superkingdom"],
             default="species",
@@ -185,8 +176,8 @@ def parse_blat_output(filename, options):
     return hits
 
 
-def load_taxtree_bg(queue, taxtree_pickle, taxdumpdir, id_gi_accno_pickle, rebase):
-    """Determine if previous taxtree_pickle is available and load it, otherwise create new.
+def load_taxtree_bg(queue, taxtree_pickle):
+    """Load the taxtree pickle.
     """
     if os.path.isfile(taxtree_pickle):
         logging.debug("Found taxtree pickle '{}', loading in background...".format(taxtree_pickle))
@@ -194,11 +185,8 @@ def load_taxtree_bg(queue, taxtree_pickle, taxdumpdir, id_gi_accno_pickle, rebas
             tree = cPickle.load(pickled_tree)
         logging.debug("Taxtree pickle '{}' loaded.".format(taxtree_pickle))
     else:
-        logging.debug("Found no pickled taxtree called '{}', creating one from scratch in background.".format(taxtree_pickle))
-        tree = taxtree.load_ncbi_tree_from_taxdump(taxdumpdir, id_gi_accno_pickle, rebase=rebase)
-        with open(taxtree_pickle, 'wb') as picklejar:
-            cPickle.dump(tree, picklejar, -1)
-        logging.debug("Pickled taxtree to '{}'.".format(taxtree_pickle))
+        logging.debug("Found no pickled taxtree called '{}', have you run prepare_taxdump_refseq.py?.".format(taxtree_pickle))
+        raise IOError("Found no pickled taxtree called '{}'".format(taxtree_pickle))
     queue.put(tree)
 
 
@@ -545,8 +533,7 @@ def main(filename, options):
         tree_queue = Queue()
         gene_info_queue = Queue()
         annotation_queue = Queue()
-        bg_tree_loader = Process(target=load_taxtree_bg, args=(tree_queue, 
-            options.taxtree_pickle, options.taxdumpdir, options.id_gi_accno_pickle, options.rebase_tree))
+        bg_tree_loader = Process(target=load_taxtree_bg, args=(tree_queue, options.taxtree_pickle))
         bg_gene_info_loader = Process(target=load_gene_info_bg, args=(gene_info_queue, options.gene_info_file))
         bg_annotation_loader = Process(target=load_annotation_bg, args=(annotation_queue, options.accno_annotation_pickle))
         logging.debug("Started background loading of taxtree, gene_info, and annotations...")

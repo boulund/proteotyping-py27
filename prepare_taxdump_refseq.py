@@ -14,9 +14,11 @@ import cPickle
 import fnmatch
 import os
 
+from taxtree import load_ncbi_tree_from_taxdump
 
 # This needs to be global for pickle to work
 Annotation = namedtuple("Annotation", ["geneID", "startpos", "endpos", "strand"])
+
 
 def parse_fasta(filename):
     """Reads information from FASTA headers.
@@ -91,6 +93,7 @@ def create_dict_accno_gff(refdir, pattern="*.gff"):
 def filter_GIs_from_dmp_to_pickle(gi_taxid_dmp, gi_accno):
     """Creates a dictionary with gi:taxid mappings for a set of GIs.
     """
+    gi_taxid_dmp = gi_taxid_dmp+"/gi_taxid_nucl.dmp"
     if not os.path.isfile(gi_taxid_dmp):
         raise IOError("Taxdump file {} not found.".format(gi_taxid_dmp))
     with open(gi_taxid_dmp) as f:
@@ -109,39 +112,28 @@ def filter_GIs_from_dmp_to_pickle(gi_taxid_dmp, gi_accno):
                     taxid_gi_accno[taxid] = [(gi, gi_accno[gi])]
                 inserted_counter += 1
                 gis.remove(gi)
-    logging.debug("Inserted {} GIs".format(inserted_counter))
-    if logging.getLogger().getEffectiveLevel < 20:
-        logging.debug("The following GIs were not included:")
-        for gi in gis:
-            logging.debug("{:>10}".format(gi))
+    logging.debug("Inserted {} GIs into {} taxids".format(inserted_counter, len(taxid_gi_accno.keys())))
+    logging.debug("Found no taxid:gi mapping for {} GIs:".format(len(gis)))
+    for gi in gis:
+        logging.debug("{:>10}".format(gi))
     return taxid_gi_accno
 
 
-
-
-
-def create_dict_gi_accno(refdir, pattern):
+def create_dict_gi_accno(refdir, pattern, gi_accno_regex):
     """Creates a set of GIs identified in a directory structure of reference
     sequences in FASTA format.
     """
     gi_accno = {}
     for fasta_file in find_files(refdir, pattern):
         for seqinfo in parse_fasta(fasta_file):
-            gi, accno = parse_gi_accno_from_headers(seqinfo[0])
+            gi, accno = parse_gi_accno_from_headers(seqinfo[0], gi_accno_regex)
             gi_accno[int(gi)] = accno
     return gi_accno
 
 
-def parse_gi_accno_from_headers(header):
+def parse_gi_accno_from_headers(header, gi_accno_regex):
     """Parses GI and accession number from strings (in regular FASTA header format.
     """
-    # Regex identifies:
-    #   NCBI gi numbers (digits)
-    #   NCBI GenBank accession numbers (e.g. NC_001122.22)
-    # from FASTA headers such as gi|158333233|ref|NC_009925.1|
-    # hit.group(1) is gi
-    # hit.group(2) is accession
-    gi_accno_regex = r'gi\|(\d+)\|.*ref\|(\w{1,2}_[\d\w]+\.\d{1,2})\|'
     hit = re.search(gi_accno_regex, header)
     if hit:
         return (int(hit.group(1)), hit.group(2))
@@ -155,21 +147,30 @@ def parse_commandline(argv):
     desc = """Prepares a pickled dict of relevant gi:taxid mappings for quick-loading. Fredrik Boulund (c) 2014"""
     parser = argparse.ArgumentParser(description=desc)
 
-    parser.add_argument("TAXIDS", help="Path to gi_taxid_nucl.dmp (two column format).")
+    parser.add_argument("TAXDUMP", help="Path to taxdump dir containing names.dmp, nodes.dmp, and gi_taxid_nucl.dmp.")
     parser.add_argument("REFDIR", help="Path to directory with reference sequences in FASTA format and sequence annotation in GFF format. Walks subfolders.")
 
-    parser.add_argument("--id_gi_accno_pickle", dest="id_gi_accno_pickle", metavar="FILE",
-            default="id_gi_accno.pkl",
-            help="Taxid_GI_ACCNO output file [default %(default)s]")
-    parser.add_argument("--accno_annotation_pickle", dest="accno_annotation_pickle", metavar="FILE",
-            default="accno_annotation.pkl",
-            help="ACCNO_Annotation output file [default %(default)s]")
+    parser.add_argument("--id_gi_accno_pickle", dest="id_gi_accno_pickle", metavar="PKL",
+        default="id_gi_accno.pkl",
+        help="taxid_gi_accno output pickle [default %(default)s]")
+    parser.add_argument("--accno_annotation_pickle", dest="accno_annotation_pickle", metavar="PKL",
+        default="accno_annotation.pkl",
+        help="accno_annotation output pickle [default %(default)s]")
     parser.add_argument("-f", dest="globpattern_fasta", metavar="'GLOB'",
-            default="*.fna",
-            help="Glob pattern for identifying FASTA files [%(default)s]")
+        default="*.fna",
+        help="Glob pattern for identifying FASTA files [%(default)s]")
     parser.add_argument("-g", dest="globpattern_gff", metavar="'GLOB'",
-            default="*.gff",
-            help="Glob pattern for identifying GFF files [%(default)s].")
+        default="*.gff",
+        help="Glob pattern for identifying GFF files [%(default)s].")
+    parser.add_argument("-t", dest="taxtree_pickle", metavar="PKL",
+        default="taxtree.pkl",
+        help="Filename for the taxtree pickle [%(default)s].")
+    parser.add_argument("-r", "--rebase_tree", dest="rebase", metavar="R",
+        default="2",
+        help="Rebase the taxtree to this node (discard all sibling trees) [%(default)s].")
+    parser.add_argument("--id_gi_accno_mappings", metavar="FILE",
+        default="",
+        help="Additional taxid:gi:accno mappings in tabseparated plain text file [%(default)s].")
 
     devoptions = parser.add_argument_group("Developer options")
     devoptions.add_argument("--loglevel", choices=["INFO", "DEBUG"], 
@@ -189,32 +190,70 @@ if __name__ == "__main__":
 
     options = parse_commandline(argv)
 
-    tic = time.time()
-    logging.debug("Creating a set of GIs (based on FASTA headers) to include in the pickle...")
-    gi_accno = create_dict_gi_accno(options.REFDIR, options.globpattern_fasta)
-    logging.debug("Found {} GIs in {} seconds.".format(len(gi_accno.keys()), time.time()-tic))
+    if os.path.isfile(options.taxtree_pickle):
+        logging.info("Found previous '{}', nothing to do.".format(options.taxtree_pickle))
+        exit()
+
+    if os.path.isfile(options.id_gi_accno_pickle):
+        logging.debug("Found previous '{}', loading...".format(options.id_gi_accno_pickle))
+        with open(options.id_gi_accno_pickle) as pkl:
+            id_gi_accno = cPickle.load(pkl)
+        logging.debug("Finished loading '{}' with {} mappings.".format(options.id_gi_accno_pickle, len(id_gi_accno)))
+    else:
+        # Regex identifies:
+        #   NCBI gi numbers (digits)
+        #   NCBI GenBank accession numbers (e.g. NC_001122.22)
+        # from FASTA headers such as gi|158333233|ref|NC_009925.1|
+        # hit.group(1) is gi
+        # hit.group(2) is accession
+        gi_accno_regex = re.compile(r'gi\|(\d+)\|.*ref\|(\w{1,2}_[\d\w]+\.\d{1,2})\|')
+
+        tic = time.time()
+        logging.debug("Creating a set of GIs and ACCNOs (based on FASTA headers) to include in the pickle...")
+        gi_accno = create_dict_gi_accno(options.REFDIR, options.globpattern_fasta, gi_accno_regex)
+        logging.debug("Found {} GIs and ACCNOs in FASTA headers in {} seconds.".format(len(gi_accno.keys()), time.time()-tic))
+
+        tic = time.time()
+        logging.debug("Finding taxid:gi mappings from {}...".format(options.TAXDUMP+"/gi_taxid_nucl.dmp"))
+        id_gi_accno = filter_GIs_from_dmp_to_pickle(options.TAXDUMP, gi_accno)
+        logging.debug("Identified {} taxid:gi,accno mappings in {} seconds.".format(len(id_gi_accno.keys()), time.time()-tic))
+        tic = time.time()
+        logging.debug("Writing pickle to '{}'.".format(options.id_gi_accno_pickle))
+        with open(options.id_gi_accno_pickle, 'wb') as pkl:
+            cPickle.dump(id_gi_accno, pkl, -1) # Highest protocol available
+        logging.debug("Time to write pickle: {}.".format(time.time()-tic))
+
+    if options.id_gi_accno_mappings:
+        with open(options.id_gi_accno_mappings) as f:
+            extracounter = 0
+            for line in f:
+                taxid, gi, accno = line.split()
+                try:
+                    id_gi_accno[taxid].append((int(gi), accno))
+                except KeyError:
+                    id_gi_accno[taxid] = [(int(gi), accno)]
+                extracounter += 1
+        logging.debug("Inserted {} additional taxid:gi:accno mappings".format(extracounter))
+
+    if os.path.isfile(options.accno_annotation_pickle):
+        logging.debug("Found previous '{}', skipping accno_annotation pickle creation.".format(options.accno_annotation_pickle))
+    else:
+        tic = time.time()
+        logging.debug("Creating annotation dict (based on GFF files) to include in the pickle...")
+        accno_gff = create_dict_accno_gff(options.REFDIR, options.globpattern_gff)
+        logging.debug("Found {} annotations in {} seconds.".format(len(accno_gff.keys()), time.time()-tic))
+        tic = time.time()
+        logging.debug("Writing pickle to '{}'.".format(options.accno_annotation_pickle))
+        with open(options.accno_annotation_pickle, 'wb') as pkl:
+            cPickle.dump(accno_gff, pkl, -1) # Highest protocol available
+        logging.debug("Time to write pickle: {}.".format(time.time()-tic))
 
     tic = time.time()
-    logging.debug("Filtering GIs from {}...".format(options.TAXIDS))
-    id_gi_accno = filter_GIs_from_dmp_to_pickle(options.TAXIDS, gi_accno)
-    logging.debug("{} entries remaining".format(len(id_gi_accno.keys())))
-    logging.debug("Time to filter GIs: {}.".format(time.time()-tic))
-
+    logging.debug("Creating taxtree pickle from TAXDUMP={}".format(options.TAXDUMP))
+    tree = load_ncbi_tree_from_taxdump(options.TAXDUMP, options.id_gi_accno_pickle, rebase=options.rebase)
+    logging.debug("Time to create taxtree: {}.".format(time.time()-tic))
+    logging.debug("Writing taxtree to pickle: {}".format(options.taxtree_pickle))
     tic = time.time()
-    logging.debug("Writing pickle to '{}'.".format(options.id_gi_accno_pickle))
-    with open(options.id_gi_accno_pickle, 'wb') as pkl:
-        cPickle.dump(id_gi_accno, pkl, -1) # Highest protocol available
-    logging.debug("Time to write pickle: {}.".format(time.time()-tic))
-
-    tic = time.time()
-    logging.debug("Creating annotation dict (based on GFF files) to include in the pickle...")
-    accno_gff = create_dict_accno_gff(options.REFDIR, options.globpattern_gff)
-    logging.debug("Found {} annotations in {} seconds.".format(len(accno_gff.keys()), time.time()-tic))
-
-    tic = time.time()
-    logging.debug("Writing pickle to '{}'.".format(options.accno_annotation_pickle))
-    with open(options.accno_annotation_pickle, 'wb') as pkl:
-        cPickle.dump(accno_gff, pkl, -1) # Highest protocol available
-    logging.debug("Time to write pickle: {}.".format(time.time()-tic))
-
-
+    with open(options.taxtree_pickle, 'wb') as picklejar:
+        cPickle.dump(tree, picklejar, -1)
+    logging.debug("Pickled taxtree to '{}' in {}.".format(options.taxtree_pickle, time.time()-tic))
