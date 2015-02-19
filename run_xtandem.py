@@ -215,11 +215,13 @@ INPUT_XML = """<?xml version="1.0"?>
 
 
 if __name__ == "__main__":
-    try:
-        xtandem = Popen("tandem.exe", stdout=PIPE, stderr=PIPE).communicate()
-    except OSError:
-        print "ERROR: Cannot find tandem.exe in PATH"
-        exit(2)
+    # See if tandem.exe is available in PATH or in current dir
+    retcode = subprocess.call("which tandem.exe", stdout=PIPE, stderr=PIPE, shell=True)
+    if retcode != 0:
+        retcode = subprocess.call("ls ./tandem.exe", stdout=PIPE, stderr=PIPE, shell=True)
+        if retcode != 0:
+            print "ERROR: Cannot find tandem.exe in PATH or current dir."
+            exit(2)
     options = parse_commandline()
 
     create_misc_xtandem_files(options)
