@@ -135,6 +135,7 @@ def parse_blat_output(filename, options):
     logging.info("Parsing and performing absolute filtering of hits from '{}'...".format(filename))
     if options.leave_out:
         leave_out_accnos = set(options.leave_out.split(","))
+        logging.info("Ignoring hits to {}".format(leave_out_accnos))
     else:
         leave_out_accnos = set()
     with open(filename) as blast8:
