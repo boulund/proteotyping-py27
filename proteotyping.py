@@ -459,6 +459,8 @@ def write_gene_counts(outfilehandle, gene_counts, gene_info, maxprint=50, sort=T
                 symbol, desc = gene_info[geneID][0:2]
             except KeyError:
                 logging.warning("Couldn't find information for geneID {}.".format(geneID))
+                outfilehandle.write("{:<9} {:<5} {:<18} {:<}\n".format(geneID, count, "", ""))
+                continue
             outfilehandle.write("{:<9} {:<5} {:<18} {:<}\n".format(geneID, count, symbol, desc))
             printcounter += 1
         else:
