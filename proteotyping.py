@@ -40,17 +40,21 @@ def parse_commandline(argv):
     parser = argparse.ArgumentParser(description=desc)
 
     parser.add_argument("FILE", nargs="+",
+        type=existing_file,
         help="BLAT output file.")
     parser.add_argument("-d", dest="display", type=int, metavar="N",
         default=10,
         help="Number of results to display [%(default)s].")
     parser.add_argument("--accno_annotation_pickle", dest="accno_annotation_pickle", metavar="FILE",
+        type=existing_file,
         default="accno_annotation.pkl",
         help="Filename of accno_annotation pickle [%(default)s].")
     parser.add_argument("--taxtree_pickle",  dest="taxtree_pickle", metavar="FILE",
+        type=existing_file,
         default="taxtree.pkl",
         help="Filename of pickled previously constructed taxtree to load instead of making it from scratch [%(default)s].")
     parser.add_argument("--gene_info", dest="gene_info_file", metavar="FILE",
+        type=existing_file,
         default="/shared/db/NCBI/gene/gene_info",
         help="NCBI 'gene_info' file [%(default)s].")
     parser.add_argument("--taxonomic_rank", dest="taxonomic_rank", metavar="LVL", type=str,
