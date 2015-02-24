@@ -40,65 +40,65 @@ def parse_commandline(argv):
     parser = argparse.ArgumentParser(description=desc)
 
     parser.add_argument("FILE", nargs="+",
-            help="BLAT output file.")
+        help="BLAT output file.")
     parser.add_argument("-d", dest="display", type=int, metavar="N",
-            default=10,
-            help="Number of results to display [%(default)s].")
+        default=10,
+        help="Number of results to display [%(default)s].")
     parser.add_argument("--accno_annotation_pickle", dest="accno_annotation_pickle", metavar="FILE",
-            default="accno_annotation.pkl",
-            help="Filename of accno_annotation pickle [%(default)s].")
+        default="accno_annotation.pkl",
+        help="Filename of accno_annotation pickle [%(default)s].")
     parser.add_argument("--taxtree_pickle",  dest="taxtree_pickle", metavar="FILE",
-            default="taxtree.pkl",
-            help="Filename of pickled previously constructed taxtree to load instead of making it from scratch [%(default)s].")
+        default="taxtree.pkl",
+        help="Filename of pickled previously constructed taxtree to load instead of making it from scratch [%(default)s].")
     parser.add_argument("--gene_info", dest="gene_info_file", metavar="FILE",
-            default="/shared/db/NCBI/gene/gene_info",
-            help="NCBI 'gene_info' file [%(default)s].")
+        default="/shared/db/NCBI/gene/gene_info",
+        help="NCBI 'gene_info' file [%(default)s].")
     parser.add_argument("--taxonomic_rank", dest="taxonomic_rank", metavar="LVL", type=str,
-            choices=["no rank", "subspecies", "species", "genus", "family", "order", "class", "phylum", "superkingdom"],
-            default="species",
-            help="Set the taxonomic level on which hits are grouped [%(default)s].")
+        choices=["no rank", "subspecies", "species", "genus", "family", "order", "class", "phylum", "superkingdom"],
+        default="species",
+        help="Set the taxonomic level on which hits are grouped [%(default)s].")
     parser.add_argument("--fragment_length", dest="fragment_length", metavar="L", type=int,
-            default=6,
-            help="Minimum fragment length [%(default)s].")
+        default=6,
+        help="Minimum fragment length [%(default)s].")
     parser.add_argument("-i", "--identity", dest="identity", metavar="I", type=float,
-            default=90,
-            help="Filter out hits with less than or equal to this percentage identity [%(default)s].")
+        default=90,
+        help="Filter out hits with less than or equal to this percentage identity [%(default)s].")
     parser.add_argument("--fragment_coverage", dest="fragment_coverage", metavar="C", type=float,
-            default=1,
-            help="Amount of fragment covered in alignment [%(default)s].")
+        default=1,
+        help="Amount of fragment covered in alignment [%(default)s].")
     parser.add_argument("--identity_difference", type=float, metavar="D",
-            default=5.0,
-            help="Maximum identity difference between highest and lowest hit for each fragment. Floating point between 0.0-100.0 [%(default)s].")
+        default=5.0,
+        help="Maximum identity difference between highest and lowest hit for each fragment. Floating point between 0.0-100.0 [%(default)s].")
     parser.add_argument("--remove_nondiscriminative", dest="remove_nondiscriminative", action="store_false",
-            default=True, # TODO: This is unintuitive: reverse wording
-            help="Remove fragments that match to more than one entity at the specific taxonomic level [%(default)s].")
+        default=True, # TODO: This is unintuitive: reverse wording
+        help="Remove fragments that match to more than one entity at the specific taxonomic level [%(default)s].")
     parser.add_argument("--maxprint", dest="maxprint", metavar="N", type=int,
-            default=50,
-            help="Maximum number of hit annotations to print [%(default)s].")
+        default=50,
+        help="Maximum number of hit annotations to print [%(default)s].")
     parser.add_argument("--output", dest="output",
-            default="",
-            help="Write results to this filename [results/FILE.results].")
+        default="",
+        help="Write results to this filename [results/FILE.results].")
 
 
     devoptions = parser.add_argument_group("Developer options", "Voids warranty ;)")
     devoptions.add_argument("--loglevel", choices=["INFO", "DEBUG", "VERBOSE"],
-            default="INFO", 
-            help="Set logging level [%(default)s].")
+        default="INFO", 
+        help="Set logging level [%(default)s].")
     devoptions.add_argument("--logfile", dest="logfile", 
-            default="proteotyping.log",
-            help="Filename for log output [%(default)s].")
+        default="proteotyping.log",
+        help="Filename for log output [%(default)s].")
     devoptions.add_argument("--walk", dest="walk", action="store_true",
-            default=False,
-            help="Instead of only visiting 'leaf' nodes when printing, walk the entire distance from the root node down [%(default)s].")
+        default=False,
+        help="Instead of only visiting 'leaf' nodes when printing, walk the entire distance from the root node down [%(default)s].")
     devoptions.add_argument("--numCPUs", dest="numCPUs", type=int,
-            default=16,
-            help="Number of CPUs to utilize in parallel regions [%(default)s].")
+        default=16,
+        help="Number of CPUs to utilize in parallel regions [%(default)s].")
     devoptions.add_argument("--interactive", dest="interactive", action="store_true",
-            default=False,
-            help="Read everything into the namespace but do nothing. Useful for IPython settions [%(default)s].")
+        default=False,
+        help="Read everything into the namespace but do nothing. Useful for IPython settions [%(default)s].")
     devoptions.add_argument("--leave-out", metavar="ACCNO", dest="leave_out",
-            default="",
-            help="Disregard any hits to ACCNO when parsing and filtering blast8 output. Can be a list of comma separated ACCNOs (no spaces) [%(default)s].")
+        default="",
+        help="Disregard any hits to ACCNO when parsing and filtering blast8 output. Can be a list of comma separated ACCNOs (no spaces) [%(default)s].")
     devoptions.add_argument("--blacklist_accnos", metavar="FILE", dest="blacklist_accnos",
         type=existing_file,
         help="File with ACCNOs to blacklist (i.e. not include in parsing blast8 output).")
