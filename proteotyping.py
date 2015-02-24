@@ -309,7 +309,7 @@ def informative_fragment(hitlist, tree, taxonomic_rank):
         return (False, 0)
 
     if hit_node:
-        logging.debug("Found hit to node {}.".format(hit_node[0].name))
+        logging.debug("Found hit to node {}".format(hit_node[0].name))
         if hit_node[0].rank == taxonomic_rank:
             ancestor = hit_node[0]
         else:
@@ -328,7 +328,7 @@ def informative_fragment(hitlist, tree, taxonomic_rank):
             for accno in descendant.accno:
                 child_nodes.add(accno)
     else:
-        logging.warning("Found no node in the tree for {}.".format(hitlist[0].target_accno))
+        logging.warning("Found no node in the tree for {}".format(hitlist[0].target_accno))
         return (False, 0)
 
 
