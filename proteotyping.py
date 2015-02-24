@@ -90,6 +90,9 @@ def parse_commandline(argv):
     devoptions.add_argument("--interactive", dest="interactive", action="store_true",
             default=False,
             help="Read everything into the namespace but do nothing. Useful for IPython settions [%(default)s].")
+    devoptions.add_argument("--leave-out", metavar="ACCNO", dest="leave_out",
+            default="",
+            help="Disregard any hits to ACCNO when parsing and filtering blast8 output. Can be a list of comma separated ACCNOs (no spaces) [%(default)s].")
 
     if len(argv) < 2:
         parser.print_help()
@@ -130,6 +133,11 @@ def parse_blat_output(filename, options):
     hits = {}
 
     logging.info("Parsing and performing absolute filtering of hits from '{}'...".format(filename))
+    if options.leave_out:
+        leave_out_accnos = set(options.leave_out.split(","))
+        logging.info("Ignoring hits to {}".format(leave_out_accnos))
+    else:
+        leave_out_accnos = set()
     with open(filename) as blast8:
         for line in blast8:
             blast8_line = line.split()
@@ -143,7 +151,9 @@ def parse_blat_output(filename, options):
             #    logging.debug("Parsed {} hits...".format(hit_counter))
 
             target_accno = blast8_line[1].split("ref|")[1].split("|", 1)[0]
-            mapping = "" #"{}::{}".format(fragment_id, target_accno)
+            if target_accno in leave_out_accnos:
+                continue
+            #mapping = "" #"{}::{}".format(fragment_id, target_accno)
 
             identity = float(blast8_line[2])
             if identity < options.identity:
