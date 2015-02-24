@@ -25,6 +25,14 @@ Hit = namedtuple("Hit", ["target_accno", "identity", "matches", "mismatches",
     "score", "startpos", "endpos", "fragment_length", "fragment_coverage"])
 
 
+def existing_file(f):
+    """ Check that file exists.
+    """
+    if not os.path.exists(f) or not os.path.isfile(f):
+        raise argparse.ArgumentError("{} does not exist.".format(f))
+    return f
+
+
 def parse_commandline(argv):
     """Parse commandline arguments"""
 
@@ -91,6 +99,9 @@ def parse_commandline(argv):
     devoptions.add_argument("--leave-out", metavar="ACCNO", dest="leave_out",
             default="",
             help="Disregard any hits to ACCNO when parsing and filtering blast8 output. Can be a list of comma separated ACCNOs (no spaces) [%(default)s].")
+    devoptions.add_argument("--blacklist_accnos", metavar="FILE", dest="blacklist_accnos",
+        type=existing_file,
+        help="File with ACCNOs to blacklist (i.e. not include in parsing blast8 output).")
 
     if len(argv) < 2:
         parser.print_help()
@@ -116,6 +127,16 @@ def parse_commandline(argv):
     return options
 
 
+def parse_accno_blacklist(filename):
+    """ Parses list of ACCNOs to blacklist, returns set.
+    """
+    blacklisted_accnos = set()
+    with open(filename) as f:
+        for line in f:
+            blacklisted_accnos.add(line.strip())
+    return blacklisted_accnos
+
+
 def parse_blat_output(filename, options):
     """Parses blat output. Filters out hits based on user critera. 
     
@@ -131,11 +152,16 @@ def parse_blat_output(filename, options):
     hits = {}
 
     logging.info("Parsing and performing absolute filtering of hits from '{}'...".format(filename))
+
+    blacklisted_accnos = set()
     if options.leave_out:
-        leave_out_accnos = set(options.leave_out.split(","))
-        logging.info("Ignoring hits to {}".format(leave_out_accnos))
-    else:
-        leave_out_accnos = set()
+        blacklisted_accnos = set(options.leave_out.split(","))
+        logging.info("Ignoring hits to {}".format(blacklisted_accnos))
+    if options.blacklist_accnos:
+        blacklisted_accnos = blacklisted_accnos.union(parse_accno_blacklist(options.blacklist_accnos))
+        logging.info("Blacklisting ACCNOs in {}".format(options.blacklist_accnos))
+        logging.debug("Blacklisted ACCNOs: {}".format(blacklisted_accnos))
+
     with open(filename) as blast8:
         for line in blast8:
             blast8_line = line.split()
@@ -149,10 +175,10 @@ def parse_blat_output(filename, options):
             #    logging.debug("Parsed {} hits...".format(hit_counter))
 
             target_accno = blast8_line[1].split("ref|")[1].split("|", 1)[0]
-            if target_accno in leave_out_accnos:
+            if target_accno in blacklisted_accnos:
                 continue
-            #mapping = "" #"{}::{}".format(fragment_id, target_accno)
 
+            #mapping = "" #"{}::{}".format(fragment_id, target_accno)
             identity = float(blast8_line[2])
             if identity < options.identity:
                 #logging.log(0, "  {} passed identity.".format(mapping))
