@@ -48,7 +48,7 @@ def generate_seqences_from_bioml_xml(xmlfile, first_seq_only=True):
         for _, element in etree.iterparse(xmlfile):
             if element.tag == "group":
                 for child in element.iterdescendants("domain"):
-                    yield child.attrib["id"], child.attrib["expect"], child.attrib["seq"]
+                    yield element.attrib["label"], child.attrib["id"], child.attrib["expect"], child.attrib["seq"]
                     break
                 continue
     else:
@@ -70,13 +70,17 @@ def convert_tandem_bioml_to_fasta(xmlfile, outdir):
 
     outfilename = path.join(outdir, path.splitext(path.basename(xmlfile))[0]+".fasta")
     logging.debug("Writing FASTA to '{}'.".format(outfilename))
+    sourceheaders = set()
     write_counter = 0
     with open(outfilename, 'w') as fastafile:
-        for identity, expect, sequence in generate_seqences_from_bioml_xml(xmlfile):
+        for sourceheader, identity, expect, sequence in generate_seqences_from_bioml_xml(xmlfile):
+            print sourceheader
+            sourceheaders.add(sourceheader)
             logging.debug("Writing seq {} with length {}, expect {}.".format(identity, len(sequence), expect))
             header = ">{}:{}_{}".format(identity, expect, len(sequence))
             fastafile.write("{}\n{}\n".format(header, sequence))
             write_counter += 1
+    logging.info("Found {} unique source sequences in the XML.".format(len(sourceheaders)))
     logging.info("Wrote {} sequences to {}.".format(write_counter, outfilename))
 
 
