@@ -74,7 +74,6 @@ def convert_tandem_bioml_to_fasta(xmlfile, outdir):
     write_counter = 0
     with open(outfilename, 'w') as fastafile:
         for sourceheader, identity, expect, sequence in generate_seqences_from_bioml_xml(xmlfile):
-            print sourceheader
             sourceheaders.add(sourceheader)
             logging.debug("Writing seq {} with length {}, expect {}.".format(identity, len(sequence), expect))
             header = ">{}:{}_{}".format(identity, expect, len(sequence))
