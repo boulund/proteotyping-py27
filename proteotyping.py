@@ -55,7 +55,6 @@ def parse_commandline(argv):
         help="Filename of pickled previously constructed taxtree to load instead of making it from scratch [%(default)s].")
     parser.add_argument("--gene_info", dest="gene_info_file", metavar="FILE",
         type=existing_file,
-        default="/shared/db/NCBI/gene/gene_info",
         help="NCBI 'gene_info' file [%(default)s].")
     parser.add_argument("--taxonomic_rank", dest="taxonomic_rank", metavar="LVL", type=str,
         choices=["no rank", "subspecies", "species", "genus", "family", "order", "class", "phylum", "superkingdom"],
