@@ -179,6 +179,7 @@ def parse_blat_output(filename, options):
 
             target_accno = blast8_line[1].split("ref|")[1].split("|", 1)[0]
             if target_accno in blacklisted_accnos:
+                logging.debug("Ignoring fragment {} with hit to blacklisted {}".format(fragment_id, target_accno))
                 continue
 
             #mapping = "" #"{}::{}".format(fragment_id, target_accno)
