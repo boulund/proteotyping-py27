@@ -620,7 +620,6 @@ def main(filename, options):
         logging.debug("Annotation background loader subprocess terminated.")
 
     write_results(filename, tree, discriminative_hits, num_discriminative_fragments, gene_info, annotation, options)
-    FIRST_RUN = False
     return tree, hits, discriminative_hits, gene_info, annotation
 
 
@@ -636,3 +635,4 @@ if __name__ == "__main__":
         main(filename, options)
         if not FIRST_RUN:
             reset_tree(tree)
+        FIRST_RUN = False
