@@ -597,9 +597,9 @@ def main(filename, options):
     num_discriminative_fragments = len(discriminative_hits)
 
     if logging.getLogger().getEffectiveLevel() < 20:
-        logging.log(0,"All filtered hits:")
+        logging.log(0,"All remaining hits after filtering:")
         for fragment, hitlist_taxid in discriminative_hits.iteritems():
-            for hit in hitlist[0]:
+            for hit in hitlist_taxid[0]:
                 logging.log(0,"  {} {}".format(fragment, hit))
 
     insert_hits_into_tree(tree, discriminative_hits)
