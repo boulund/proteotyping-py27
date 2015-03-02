@@ -98,13 +98,13 @@ def parse_commandline(argv):
         help="Number of CPUs to utilize in parallel regions [%(default)s].")
     devoptions.add_argument("--interactive", dest="interactive", action="store_true",
         default=False,
-        help="Read everything into the namespace but do nothing. Useful for IPython settions [%(default)s].")
+        help="Read everything into the namespace but do nothing. Useful for IPython sessions [%(default)s].")
     devoptions.add_argument("--leave-out", metavar="ACCNO", dest="leave_out",
         default="",
-        help="Disregard any hits to ACCNO when parsing and filtering blast8 output. Can be a list of comma separated ACCNOs (no spaces) [%(default)s].")
+        help="Disregard any hits to ACCNO when parsing and filtering blast8 output. Can be a list of comma separated ACCNOs (no spaces).")
     devoptions.add_argument("--blacklist_accnos", metavar="FILE", dest="blacklist_accnos",
         type=existing_file,
-        help="File with ACCNOs to blacklist (i.e. not include in parsing blast8 output).")
+        help="File with ACCNOs to blacklist (i.e. ignored when parsing blast8 output).")
 
     if len(argv) < 2:
         parser.print_help()
