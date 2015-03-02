@@ -633,4 +633,5 @@ if __name__ == "__main__":
     FIRST_RUN = True
     for filename in options.FILE:
         main(filename, options)
-        reset_tree(tree)
+        if not FIRST_RUN:
+            reset_tree(tree)
