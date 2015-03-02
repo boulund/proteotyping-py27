@@ -1,4 +1,4 @@
-#!/usr/bin/env python
+#!/usr/bin/env python2.7
 # Fredrik Boulund 2015
 # Convenience script to run X!!tandem on multiple files
 

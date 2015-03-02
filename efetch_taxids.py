@@ -1,4 +1,4 @@
-#!/usr/bin/env python
+#!/usr/bin/env python2.7
 # Fredrik Boulund 2015
 # Fetch taxids from GenBank via ACCNO
 # Input is list of lines with GI ACCNO separates by whitespace

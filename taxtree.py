@@ -1,4 +1,4 @@
-#!/usr/bin/env python
+#!/usr/bin/env python2.7
 # Fredrik Boulund 
 # 2014
 # Taxonomic trees
