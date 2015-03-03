@@ -1,0 +1,99 @@
+# Fredrik Boulund 2015
+# Snakemake workflow for proteotyping
+# 
+# vi:syntax=python
+# vi:filetype=python
+# coding: utf-8
+
+####################################################################
+# File path configuration
+####################################################################
+BLAT_DB =     "/c3se/NOBACKUP/groups/c3-snic001-12-175/sequences/proteotyping/bacterial_20150210/bacterial_genomes.fasta"
+XTANDEM_DB =  "/c3se/NOBACKUP/groups/c3-snic001-12-175/sequences/proteotyping/xtandem_refdb/ms_refdb.fasta"
+GENE_INFO =   "/c3se/NOBACKUP/groups/c3-snic001-12-175/sequences/proteotyping/gene_20141013/gene_info"
+BLACKLIST =   "/c3se/NOBACKUP/groups/c3-snic001-12-175/proteotyping/snaketest/ref/blacklist.txt"
+TAXTREE =     "/c3se/NOBACKUP/groups/c3-snic001-12-175/proteotyping/snaketest/ref/taxtree.pkl"
+ANNOTATIONS = "/c3se/NOBACKUP/groups/c3-snic001-12-175/proteotyping/snaketest/ref/accno_annotation.pkl"
+LOGLEVEL= "DEBUG" #"INFO"
+MAXPRINT = 5000
+
+
+####################################################################
+# Determination of what samples are present
+# 
+# Find what files are present in the 1.mzXML dir;
+# each file should produce a result target in 5.results.
+####################################################################
+
+IDS, = glob_wildcards("1.mzXML/{id}.mzXML.gz")
+
+
+####################################################################
+# Workflow rules
+####################################################################
+
+# Pseudo target to produce all proteotyping results
+rule all:
+    input: expand("5.results/{id}.results", id=IDS)
+
+rule all_xtandem:
+    input: expand("2.xml/{id}.xml", id=IDS)
+
+rule test_EU227:
+    input: "5.results/EU227.results"
+
+
+# Run X!!tandem
+rule xtandem:
+    input: "1.mzXML/{sample}.mzXML.gz"
+    output: "2.xml/{sample}.xml"
+    threads: 16
+    params: 
+        runtime="24:00:00",
+        memsize="SMALLMEM",
+        jobname="xtandem"
+    # Since X!!tandem annoyingly appends the run date and time to 
+    # the filename, the file is renamed to a simpler name after 
+    # X!!tandem finishes. 
+    shell: 
+        """
+        run_xtandem.py --output {output} -n {threads} --db {XTANDEM_DB} --loglevel {LOGLEVEL}"
+        mv {output}* 2.xml/{wildcards.sample}
+        """
+
+
+# Convert X!!tandem output to FASTA
+rule xml2fasta:
+    input: "2.xml/{sample}.xml"
+    output: "3.fasta/{sample}.fasta"
+    params: 
+        runtime="00:10:00",
+        memsize="SMALLMEM",
+        jobname="xml2fasta"
+    shell: "convert_tandem_xml_2_fasta.py -O {output} {input}"
+
+
+# Run BLAT
+rule blat:
+    input: "3.fasta/{sample}.fasta"
+    output: "4.blast8/{sample}.blast8"
+    params: 
+        runtime="03:00:00",
+        memsize="SMALLMEM",
+        jobname="blat"
+    shell: "blat {BLAT_DB} {input} -out=blast8 -t=dnax -q=prot -tileSize=5 -stepSize=5 -minScore=10 -minIdentity=85 {output}" 
+
+
+# Run proteotyping
+rule proteotyping:
+    input: "4.blast8/{sample}.blast8"
+    output: 
+        results="5.results/{sample}.results",
+        logfile="5.results/{sample}.results.log"
+    params: 
+        runtime="03:00:00",
+        memsize="BIGMEM",
+        jobname="proteotyping"
+    shell: "proteotyping.py {input} --gene_info {GENE_INFO} --accno_annotation_pickle {ANNOTATIONS} --taxtree_pickle {TAXTREE} --blacklist_accnos {BLACKLIST} --maxprint {MAXPRINT} --logfile {output.logfile} --loglevel {LOGLEVEL} --output {output.results} --numCPUs 1"
+
+
