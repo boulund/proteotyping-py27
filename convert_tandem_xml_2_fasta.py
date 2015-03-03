@@ -17,14 +17,17 @@ def parse_commandline():
 
     parser = argparse.ArgumentParser(description=desc)
     parser.add_argument("FILE", type=str, nargs="+",
-            help="Filename of output XML file to convert to FASTA")
-    parser.add_argument("-o", dest="outdir", metavar="DIR", type=str,
-            default="fasta",
-            help="Output directory [%(default)s].")
+        help="Filename of output XML file to convert to FASTA")
+    parser.add_argument("-d", dest="outdir", metavar="DIR", type=str,
+        default="fasta",
+        help="Output directory [%(default)s].")
+    parser.add_argument("-O", dest="outfile", metavar="FILE", 
+        default="",
+        help="Output filename. If specified only one file is expected and outdir is disregarded.")
     parser.add_argument("--loglevel", 
-            choices=["INFO", "DEBUG"],
-            default="INFO",
-            help="Set logging level [%(default)s].")
+        choices=["INFO", "DEBUG"],
+        default="INFO",
+        help="Set logging level [%(default)s].")
 
     if len(argv)<2:
         parser.print_help()
@@ -61,14 +64,17 @@ def generate_seqences_from_bioml_xml(xmlfile, first_seq_only=True):
 
 
 
-def convert_tandem_bioml_to_fasta(xmlfile, outdir):
+def convert_tandem_bioml_to_fasta(xmlfile, outdir, outfile):
     """Converts X!tandem output BIOML XML to FASTA, writes to file in outdir.
     """
 
-    if not path.exists(outdir):
-        makedirs(outdir)
+    if outfile:
+        outfilename = outfile
+    else:
+        outfilename = path.join(outdir, path.splitext(path.basename(xmlfile))[0]+".fasta")
+        if not path.exists(outdir):
+            makedirs(outdir)
 
-    outfilename = path.join(outdir, path.splitext(path.basename(xmlfile))[0]+".fasta")
     logging.debug("Writing FASTA to '{}'.".format(outfilename))
     sourceheaders = set()
     write_counter = 0
@@ -87,9 +93,12 @@ def main(options):
     """Main.
     """
     for xmlfile in options.FILE:
-        convert_tandem_bioml_to_fasta(xmlfile, options.outdir)
+        convert_tandem_bioml_to_fasta(xmlfile, options.outdir, options.outfile)
 
 
 if __name__ == "__main__":
     options = parse_commandline()
+    if options.outfile and len(options.FILE) > 1:
+        logging.error("Cannot specify output filename with more than one file on command line")
+        exit()
     main(options)
