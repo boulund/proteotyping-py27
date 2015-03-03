@@ -47,15 +47,13 @@ def parse_commandline(argv):
         help="Number of results to display [%(default)s].")
     parser.add_argument("--accno_annotation_pickle", dest="accno_annotation_pickle", metavar="FILE",
         type=existing_file,
-        default="accno_annotation.pkl",
-        help="Filename of accno_annotation pickle [%(default)s].")
+        help="Filename of accno_annotation pickle.")
     parser.add_argument("--taxtree_pickle",  dest="taxtree_pickle", metavar="FILE",
         type=existing_file,
-        default="taxtree.pkl",
-        help="Filename of pickled previously constructed taxtree to load instead of making it from scratch [%(default)s].")
+        help="Filename of taxtree pickle.")
     parser.add_argument("--gene_info", dest="gene_info_file", metavar="FILE",
         type=existing_file,
-        help="NCBI 'gene_info' file [%(default)s].")
+        help="NCBI 'gene_info' file.")
     parser.add_argument("--taxonomic_rank", dest="taxonomic_rank", metavar="LVL", type=str,
         choices=["no rank", "subspecies", "species", "genus", "family", "order", "class", "phylum", "superkingdom"],
         default="species",
