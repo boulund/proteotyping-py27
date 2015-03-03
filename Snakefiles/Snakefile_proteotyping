@@ -40,7 +40,7 @@ rule all_xtandem:
     input: expand("2.xml/{id}.xml", id=IDS)
 
 rule test_EU227:
-    input: "5.results/EU227.results"
+    input: "5.results/EU227_QE_141030_21.results"
 
 
 # Run X!!tandem
@@ -57,7 +57,7 @@ rule xtandem:
     # X!!tandem finishes. 
     shell: 
         """
-        run_xtandem.py --output {output} -n {threads} --db {XTANDEM_DB} --loglevel {LOGLEVEL}"
+        run_xtandem.py --output {output} -n {threads} --db {XTANDEM_DB} --loglevel {LOGLEVEL} {input}
         mv {output}* 2.xml/{wildcards.sample}
         """
 
