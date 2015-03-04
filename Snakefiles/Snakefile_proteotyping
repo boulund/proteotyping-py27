@@ -32,7 +32,9 @@ IDS, = glob_wildcards("1.mzXML/{id}.mzXML.gz")
 # Workflow rules
 ####################################################################
 
-# Pseudo target to produce all proteotyping results
+localrules: all, all_xtandem, test_EU227, xml2fasta
+
+############### Pseudo targets
 rule all:
     input: expand("5.results/{id}.results", id=IDS)
 
@@ -42,6 +44,8 @@ rule all_xtandem:
 rule test_EU227:
     input: "5.results/EU227_QE_141030_21.results"
 
+
+############### Actual workflow targets
 
 # Run X!!tandem
 rule xtandem:
@@ -53,8 +57,9 @@ rule xtandem:
         memsize="SMALLMEM",
         jobname="xtandem"
     # Since X!!tandem annoyingly appends the run date and time to 
-    # the filename, the file is renamed to a simpler name after 
-    # X!!tandem finishes. 
+    # the filename, the file is renamed when X!!tandem finishes 
+    # to remove the additional run date and time information because
+    # it simplifies _a lot_ for downstream rules.
     shell: 
         """
         run_xtandem.py --output {output} -n {threads} --db {XTANDEM_DB} --loglevel {LOGLEVEL} {input}
