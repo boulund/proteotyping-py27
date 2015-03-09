@@ -75,6 +75,7 @@ rule xtandem:
 rule xtandem_report:
     input: "2.xml/{sample}.xml"
     output: "2.xml/tandem_reports/{sample}_report.txt"
+    resources: local=1
     params:
         runtime="00:10:00",
         memsize="SMALLMEM",
@@ -86,6 +87,7 @@ rule xtandem_report:
 rule xml2fasta:
     input: "2.xml/{sample}.xml"
     output: "3.fasta/{sample}.fasta"
+    resources: local=1
     params: 
         runtime="00:10:00",
         memsize="SMALLMEM",
