@@ -11,9 +11,9 @@
 BLAT_DB =     "/c3se/NOBACKUP/groups/c3-snic001-12-175/sequences/proteotyping/bacterial_20150210/bacterial_genomes.fasta"
 XTANDEM_DB =  "/c3se/NOBACKUP/groups/c3-snic001-12-175/sequences/proteotyping/xtandem_refdb/ms_refdb.fasta"
 GENE_INFO =   "/c3se/NOBACKUP/groups/c3-snic001-12-175/sequences/proteotyping/gene_20141013/gene_info"
-BLACKLIST =   "/c3se/NOBACKUP/groups/c3-snic001-12-175/proteotyping/snaketest/ref/blacklist.txt"
-TAXTREE =     "/c3se/NOBACKUP/groups/c3-snic001-12-175/proteotyping/snaketest/ref/taxtree.pkl"
-ANNOTATIONS = "/c3se/NOBACKUP/groups/c3-snic001-12-175/proteotyping/snaketest/ref/accno_annotation.pkl"
+BLACKLIST =   "/c3se/NOBACKUP/groups/c3-snic001-12-175/proteotyping/ref/blacklist.txt"
+TAXTREE =     "/c3se/NOBACKUP/groups/c3-snic001-12-175/proteotyping/ref/taxtree.pkl"
+ANNOTATIONS = "/c3se/NOBACKUP/groups/c3-snic001-12-175/proteotyping/ref/accno_annotation.pkl"
 LOGLEVEL= "DEBUG" #"INFO"
 MAXPRINT = 5000
 
@@ -32,14 +32,19 @@ IDS, = glob_wildcards("1.mzXML/{id}.mzXML.gz")
 # Workflow rules
 ####################################################################
 
-localrules: all, all_xtandem, test_EU227, xml2fasta
+localrules: all, all_xtandem, test_EU227, xml2fasta, xtandem_report
+
 
 ############### Pseudo targets
 rule all:
-    input: expand("5.results/{id}.results", id=IDS)
+    input: 
+        expand("5.results/{id}.results", id=IDS),
+        expand("2.xml/tandem_reports/{id}_report.txt", id=IDS)
 
 rule all_xtandem:
-    input: expand("2.xml/{id}.xml", id=IDS)
+    input: 
+        expand("2.xml/{id}.xml", id=IDS),
+        expand("2.xml/tandem_reports/{id}_report.txt", id=IDS)
 
 rule test_EU227:
     input: "5.results/EU227_QE_141030_21.results"
@@ -63,8 +68,18 @@ rule xtandem:
     shell: 
         """
         run_xtandem.py --output {output} -n {threads} --db {XTANDEM_DB} --loglevel {LOGLEVEL} {input}
-        mv {output}* 2.xml/{wildcards.sample}
+        mv {output}* 2.xml/{wildcards.sample}.xml
         """
+
+# X!!tandem output report generation
+rule xtandem_report:
+    input: "2.xml/{sample}.xml"
+    output: "2.xml/tandem_reports/{sample}_report.txt"
+    params:
+        runtime="00:10:00",
+        memsize="SMALLMEM",
+        jobname="report"
+    shell: "create_tandem_search_report.py -o 2.xml/tandem_reports/ --loglevel {LOGLEVEL} {input}"
 
 
 # Convert X!!tandem output to FASTA
@@ -95,10 +110,11 @@ rule proteotyping:
     output: 
         results="5.results/{sample}.results",
         logfile="5.results/{sample}.results.log"
+    threads: 16
     params: 
         runtime="03:00:00",
-        memsize="BIGMEM",
+        memsize="HUGEMEM",
         jobname="proteotyping"
-    shell: "proteotyping.py {input} --gene_info {GENE_INFO} --accno_annotation_pickle {ANNOTATIONS} --taxtree_pickle {TAXTREE} --blacklist_accnos {BLACKLIST} --maxprint {MAXPRINT} --logfile {output.logfile} --loglevel {LOGLEVEL} --output {output.results} --numCPUs 1"
+    shell: "proteotyping.py {input} --gene_info {GENE_INFO} --accno_annotation_pickle {ANNOTATIONS} --taxtree_pickle {TAXTREE} --blacklist_accnos {BLACKLIST} --maxprint {MAXPRINT} --logfile {output.logfile} --loglevel {LOGLEVEL} --output {output.results} --numCPUs {threads}"
 
 
