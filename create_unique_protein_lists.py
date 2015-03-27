@@ -121,7 +121,7 @@ def main(options):
         logging.debug("Finding unique proteins for {}".format(report))
         unique_gis = find_unique_proteins(report)
         logging.debug("Found {} unique proteins".format(len(unique_gis)))
-        write_unique_protein_list(unique_gis, gi_mappings, options.outdir, report+"unique_proteins.txt")
+        write_unique_protein_list(unique_gis, gi_mappings, options.outdir, report+".unique_proteins.txt")
         
         
 
