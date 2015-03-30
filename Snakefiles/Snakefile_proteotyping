@@ -14,6 +14,7 @@ GENE_INFO =   "/c3se/NOBACKUP/groups/c3-snic001-12-175/sequences/proteotyping/ge
 BLACKLIST =   "/c3se/NOBACKUP/groups/c3-snic001-12-175/proteotyping/ref/blacklist.txt"
 TAXTREE =     "/c3se/NOBACKUP/groups/c3-snic001-12-175/proteotyping/ref/taxtree.pkl"
 ANNOTATIONS = "/c3se/NOBACKUP/groups/c3-snic001-12-175/proteotyping/ref/accno_annotation.pkl"
+GI_UNIPROT =  "/c3se/NOBACKUP/groups/c3-snic001-12-175/proteotyping/ref/gi_uniprot_mapping.pkl"
 LOGLEVEL= "DEBUG" #"INFO"
 MAXPRINT = 5000
 
@@ -25,7 +26,7 @@ MAXPRINT = 5000
 # each file should produce a result target in 5.results.
 ####################################################################
 
-IDS, = glob_wildcards("1.mzXML/{id}.mzXML.gz")
+IDs, = glob_wildcards("1.mzXML/{id}.mzXML.gz")
 
 
 ####################################################################
@@ -38,13 +39,14 @@ localrules: all, all_xtandem, test_EU227, xml2fasta, xtandem_report
 ############### Pseudo targets
 rule all:
     input: 
-        expand("5.results/{id}.results", id=IDS),
-        expand("2.xml/tandem_reports/{id}_report.txt", id=IDS)
+        expand("5.results/{id}.results", id=IDs),
+        expand("2.xml/tandem_reports/{id}_report.txt", id=IDs),
+        expand("2.xml/unique_protein_lists/{id}_report.txt.unique_proteins.txt", id=IDs)
 
 rule all_xtandem:
     input: 
-        expand("2.xml/{id}.xml", id=IDS),
-        expand("2.xml/tandem_reports/{id}_report.txt", id=IDS)
+        expand("2.xml/{id}.xml", id=IDs),
+        expand("2.xml/tandem_reports/{id}_report.txt", id=IDs)
 
 rule test_EU227:
     input: "5.results/EU227_QE_141030_21.results"
@@ -81,6 +83,17 @@ rule xtandem_report:
         memsize="SMALLMEM",
         jobname="report"
     shell: "create_tandem_search_report.py -o 2.xml/tandem_reports/ --loglevel {LOGLEVEL} {input}"
+
+
+# Unique protein lists from X!!tandem reports
+rule xtandem_unique:
+    input: "2.xml/tandem_reports/{sample}_report.txt"
+    output: "2.xml/unique_protein_lists/{sample}_report.txt.unique_proteins.txt"
+    params:
+        runtime="01:00:00",
+        memsize="SMALLMEM",
+        jobname="unique"
+    shell: "create_unique_protein_lists.py -M {GI_UNIPROT} -o 2.xml/unique_protein_lists/ --loglevel {LOGLEVEL} {input}"
 
 
 # Convert X!!tandem output to FASTA
