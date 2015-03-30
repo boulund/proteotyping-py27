@@ -91,7 +91,7 @@ rule xtandem_unique:
     output: "2.xml/unique_protein_lists/{sample}_report.txt.unique_proteins.txt"
     params:
         runtime="01:00:00",
-        memsize="SMALLMEM",
+        memsize="BIGMEM",
         jobname="unique"
     shell: "create_unique_protein_lists.py -M {GI_UNIPROT} -o 2.xml/unique_protein_lists/ --loglevel {LOGLEVEL} {input}"
 
