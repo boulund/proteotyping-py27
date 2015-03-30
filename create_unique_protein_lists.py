@@ -27,6 +27,10 @@ def parse_commandline():
     parser.add_argument("-o", dest="outdir", metavar="DIR", type=str,
         default="unique_protein_lists",
         help="Output directory [%(default)s].")
+    parser.add_argument("-n", "--newline", dest="newline",
+        choices=["windows", "unix"],
+        default="windows", 
+        help="Specify what line break type to use [%(default)s].")
     parser.add_argument("--loglevel", 
         choices=["INFO", "DEBUG"],
         default="INFO",
@@ -73,7 +77,7 @@ def find_unique_proteins(report):
             
 
 
-def write_unique_protein_list(unique_gis, gi_mappings, outdir, outputfile):
+def write_unique_protein_list(unique_gis, gi_mappings, newline, outdir, outputfile):
     """ Write list of unique proteins to file.
     """
 
@@ -83,20 +87,26 @@ def write_unique_protein_list(unique_gis, gi_mappings, outdir, outputfile):
     outfile = path.join(outdir, outputfile)
 
     print "Writing to {}".format(outfile)
+    if "windows" in newline:
+        lb = "\r\n"
+    elif "unix" in newline:
+        lb = "\n"
+    else:
+        lb = "\n"
 
     nomaps = []
     with open(outfile, 'w') as f:
-        f.write("UniProtID\n")
+        f.write("UniProtID"+lb)
         for gi in unique_gis:
             try:
-                f.write(gi_mappings[gi]+"\n")
+                f.write(gi_mappings[gi]+lb)
             except KeyError:
                 logging.warning("Found no match for {}".format(gi))
                 nomaps.append(gi)
 
-        f.write("Found no mapping between gi and UniProt ID for:\n")
+        f.write("Found no mapping between gi and UniProt ID for:"+lb)
         for gi in nomaps:
-            f.write(gi+"\n")
+            f.write(gi+lb)
 
 
     
@@ -121,7 +131,7 @@ def main(options):
         logging.debug("Finding unique proteins for {}".format(report))
         unique_gis = find_unique_proteins(report)
         logging.debug("Found {} unique proteins".format(len(unique_gis)))
-        write_unique_protein_list(unique_gis, gi_mappings, options.outdir, report+".unique_proteins.txt")
+        write_unique_protein_list(unique_gis, gi_mappings, options.newline, options.outdir, report+".unique_proteins.txt")
         
         
 
