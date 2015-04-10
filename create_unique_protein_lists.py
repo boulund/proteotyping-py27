@@ -94,22 +94,14 @@ def write_unique_protein_list(unique_gis, gi_mappings, newline, outdir, outputfi
     else:
         lb = "\n"
 
-    nomaps = []
     with open(outfile, 'w') as f:
-        f.write("UniProtID"+lb)
+        f.write("UniProtID\tGI"+lb)
         for gi in unique_gis:
             try:
-                f.write(gi_mappings[gi]+lb)
+                f.write("{}\t{}{}".format(gi_mappings[gi], gi, lb))
             except KeyError:
-                logging.warning("Found no match for {}".format(gi))
-                nomaps.append(gi)
-
-        f.write("Found no mapping between gi and UniProt ID for:"+lb)
-        for gi in nomaps:
-            f.write(gi+lb)
-
-
-    
+                logging.debug("Found no match for {}".format(gi))
+                f.write("{}\t{}{}".format("-", gi, lb))
 
 
 def main(options):
@@ -134,7 +126,6 @@ def main(options):
         write_unique_protein_list(unique_gis, gi_mappings, options.newline, options.outdir, path.basename(report)+".unique_proteins.txt")
         
         
-
 
 if __name__ == "__main__":
     options = parse_commandline()
