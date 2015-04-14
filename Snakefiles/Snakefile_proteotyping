@@ -47,6 +47,7 @@ rule all_xtandem:
     input: 
         expand("2.xml/{id}.xml", id=IDs),
         expand("2.xml/tandem_reports/{id}_report.txt", id=IDs)
+        expand("2.xml/unique_protein_lists/{id}_report.txt.unique_proteins.txt", id=IDs)
 
 rule test_EU227:
     input: "5.results/EU227_QE_141030_21.results"
