@@ -303,7 +303,7 @@ def informative_fragment(hitlist, tree, taxonomic_rank):
         if len(hit_node) > 1:
             logging.warning("Found more than one node for target accno {}".format(hitlist[0].target_accno))
     else:
-        logging,warning("Empty hitlist! (This should never happen)".format(hitlist))
+        logging.warning("Empty hitlist! (This should never happen)".format(hitlist))
         return (False, 0)
 
     if hit_node:
