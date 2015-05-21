@@ -21,7 +21,7 @@ import taxtree
 
 
 # This needs to be defined at the top level for multiprocessing to work.
-Hit = namedtuple("Hit", ["target_accno", "identity", "matches", "mismatches", 
+Hit = namedtuple("Hit", ["target_accno", "identity", "matches", "mismatches",
     "score", "startpos", "endpos", "fragment_length", "fragment_coverage"])
 
 
@@ -83,9 +83,9 @@ def parse_commandline(argv):
 
     devoptions = parser.add_argument_group("Developer options", "Voids warranty ;)")
     devoptions.add_argument("--loglevel", choices=["INFO", "DEBUG", "VERBOSE"],
-        default="INFO", 
+        default="INFO",
         help="Set logging level [%(default)s].")
-    devoptions.add_argument("--logfile", dest="logfile", 
+    devoptions.add_argument("--logfile", dest="logfile",
         default="proteotyping.log",
         help="Filename for log output [%(default)s].")
     devoptions.add_argument("--walk", dest="walk", action="store_true",
@@ -198,7 +198,7 @@ def parse_blat_output(filename, options):
                 #logging.log(0, "  {} passed fragment coverage.".format(mapping))
                 continue
 
-            hit = Hit(target_accno, identity, matches, mismatches, 
+            hit = Hit(target_accno, identity, matches, mismatches,
                       0, startpos, endpos, fragment_length, fragment_coverage)
             try:
                 hits[fragment_id].append(hit)
@@ -296,8 +296,7 @@ def informative_fragment(hitlist, tree, taxonomic_rank):
     match beneath the same node of rank 'taxonomic_rank').
     Returns False otherwise.
     """
-    
-    
+
     if len(hitlist) > 0:
         hit_node = taxtree.search_for_accno(tree, hitlist[0].target_accno)
         if len(hit_node) > 1:
@@ -328,7 +327,6 @@ def informative_fragment(hitlist, tree, taxonomic_rank):
     else:
         logging.warning("Found no node in the tree for {}".format(hitlist[0].target_accno))
         return (False, 0)
-
 
     for hit in hitlist:
         if hit.target_accno not in child_nodes:
@@ -367,7 +365,7 @@ def filter_parallel(fragment_hitlist):
         return ()
 
 
-def filter_hits(hits, tree, options): 
+def filter_hits(hits, tree, options):
     """Determine if hits are disciminative at options.taxonomic_rank.
 
     Runs in parallel using multiprocessing with options.numCPUs
@@ -385,8 +383,8 @@ def filter_hits(hits, tree, options):
             fragment_id, filtered_hitlist, taxid = result
             filtered_hits[fragment_id] = (filtered_hitlist, taxid)
 
-    logging.info("Removed {} non-discriminative fragments. {} discriminative fragments with {} hits remain.".format(len(hits) - len(filtered_hits), 
-        len(filtered_hits), 
+    logging.info("Removed {} non-discriminative fragments. {} discriminative fragments with {} hits remain.".format(len(hits) - len(filtered_hits),
+        len(filtered_hits),
         sum(map(len, [hitlist for hitlist, _ in filtered_hits.itervalues()]))
         ))
     return filtered_hits
@@ -414,7 +412,7 @@ def insert_hits_into_tree(tree, discriminative_hits):
     for node in tree.traverse():
         for accno in node.accno:
             if accno in accnos:
-                node.count += count_per_accno[accno] 
+                node.count += count_per_accno[accno]
                 accnos.remove(accno)
                 logging.log(0, "Updated count of node {} with accno {} to {}.".format(node.name, accno, node.count))
         if node.name in taxids:
@@ -453,7 +451,7 @@ def reset_tree(tree):
         node.discriminative_fragments = 0
 
 
-def count_annotation_hits(discriminative_hits, annotation):
+def count_annotation_hits(discriminative_hits, annotation, tree):
     """Annotates hits to determine what genes were hit.
     """
 
@@ -463,14 +461,15 @@ def count_annotation_hits(discriminative_hits, annotation):
     for hitlist, _ in discriminative_hits.itervalues():
         for hit in hitlist:
             accno = hit.target_accno
+            tree_node = taxtree.search_for_accno(tree, accno)[0]
             try:
                 for annot in annotation[accno]:
                     if hit.startpos >= annot.startpos and hit.startpos <= annot.endpos:
                         if hit.endpos <= annot.endpos and hit.endpos >= annot.startpos:
                             try:
-                                gene_counts[annot.geneID] += 1
+                                gene_counts[annot.geneID][0] +=  1
                             except KeyError:
-                                gene_counts[annot.geneID] = 1
+                                gene_counts[annot.geneID] = [1, tree_node.taxname]
             except KeyError:
                 missing_annotation.add(accno)
     if missing_annotation:
@@ -480,24 +479,27 @@ def count_annotation_hits(discriminative_hits, annotation):
 
 
 def write_gene_counts(outfilehandle, gene_counts, gene_info, maxprint=50, sort=True):
-    """Prints counts of annotated regions with some gene info.
+    """Prints counts of annotated regions with some gene info and species.
 
     outfilehandle is an already opened filehandle.
     """
     if sort:
         counts = sorted(gene_counts.items(), key=operator.itemgetter(1), reverse=sort)
+    else:
+        counts = gene_counts
     printcounter = 0
-    
-    outfilehandle.write("geneID    #     Symbol             Description\n")
-    for geneID, count in counts:
+
+    outfilehandle.write("geneID    #     Symbol             Species            Description\n")
+    for geneID, count_and_species in counts:
         if printcounter < maxprint:
             try:
                 symbol, desc = gene_info[geneID][0:2]
             except KeyError:
                 logging.warning("Couldn't find information for geneID {}.".format(geneID))
-                outfilehandle.write("{:<9} {:<5} {:<18} {:<}\n".format(geneID, count, "", ""))
+                outfilehandle.write("{:<9} {:<5} {:<18} {:<18} {:<}\n".format(geneID, count, "", "", ""))
                 continue
-            outfilehandle.write("{:<9} {:<5} {:<18} {:<}\n".format(geneID, count, symbol, desc))
+            count, species = count_and_species
+            outfilehandle.write("{:<9} {:<5} {:<18} {:<18} {:<}\n".format(geneID, count, symbol, species, desc))
             printcounter += 1
         else:
             break
@@ -552,7 +554,7 @@ def write_results(filename, tree, discriminative_hits, num_discriminative_fragme
         outfile.write(" Total: {:<}\n".format(num_discriminative_fragments))
 
         outfile.write("-"*70+"\n")
-        gene_counts = count_annotation_hits(discriminative_hits, annotation)
+        gene_counts = count_annotation_hits(discriminative_hits, annotation, tree)
         outfile.write("Annotated regions hit by discriminative fragments:\n")
         write_gene_counts(outfile, gene_counts, gene_info, options.maxprint)
     logging.info("Finished writing results.")
