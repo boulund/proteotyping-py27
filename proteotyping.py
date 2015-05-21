@@ -489,17 +489,18 @@ def write_gene_counts(outfilehandle, gene_counts, gene_info, maxprint=50, sort=T
         counts = gene_counts
     printcounter = 0
 
-    outfilehandle.write("geneID    #     Symbol             Species            Description\n")
+    formatting_string = "{:<9} {:<5} {:<18} {:<45} {:<}\n"
+    outfilehandle.write(formatting_string.format("geneID", "#", "Symbol", "Species", "Description"))
     for geneID, count_and_species in counts:
         if printcounter < maxprint:
             try:
                 symbol, desc = gene_info[geneID][0:2]
             except KeyError:
                 logging.warning("Couldn't find information for geneID {}.".format(geneID))
-                outfilehandle.write("{:<9} {:<5} {:<18} {:<18} {:<}\n".format(geneID, count, "", "", ""))
+                outfilehandle.write(formatting_string.format(geneID, count, "", "", ""))
                 continue
             count, species = count_and_species
-            outfilehandle.write("{:<9} {:<5} {:<18} {:<18} {:<}\n".format(geneID, count, symbol, species, desc))
+            outfilehandle.write(formatting_string.format(geneID, count, symbol, species, desc))
             printcounter += 1
         else:
             break
