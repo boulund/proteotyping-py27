@@ -553,6 +553,12 @@ def write_results(filename, tree, discriminative_hits, num_discriminative_fragme
         outfile.write("-"*70+"\n")
         write_top_n_at_taxonomic_rank(outfile, tree, options.taxonomic_rank, num_discriminative_fragments, n=options.display, walk=options.walk)
         outfile.write(" Total: {:<}\n".format(num_discriminative_fragments))
+        outfile.write("-"*70+"\n")
+
+        outfile.write("Discriminative fragments with their assignment\n")
+        outfile.write("-"*70+"\n")
+        for fragment_id, hitlist_taxid_tuple in discriminative_hits.iteritems():
+            outfile.write("{:<20} {:>6}\n".format(fragment_id, hitlist_taxid_tuple[1]))
 
         outfile.write("-"*70+"\n")
         gene_counts = count_annotation_hits(discriminative_hits, annotation, tree)
