@@ -490,7 +490,7 @@ def write_gene_counts(outfilehandle, gene_counts, gene_info, maxprint=50, sort=T
     printcounter = 0
 
     formatting_string = "{:<9} {:<5} {:<18} {:<45} {:<}\n"
-    outfilehandle.write(formatting_string.format("geneID", "#", "Symbol", "Species", "Description"))
+    outfilehandle.write(formatting_string.format("geneID", "#", "Symbol", "Assignment", "Description"))
     for geneID, count_and_species in counts:
         if printcounter < maxprint:
             try:
@@ -513,6 +513,7 @@ def write_top_n_at_taxonomic_rank(outfilehandle, tree, taxonomic_rank, num_discr
     outfilehandle is an already opened filehandle.
     """
     nodes_to_print = []
+    taxid_species = {}
     if walk:
         for node in tree.traverse(is_leaf_fn=lambda n: n.rank == taxonomic_rank):
             if node.discriminative_fragments > 0:
@@ -530,9 +531,11 @@ def write_top_n_at_taxonomic_rank(outfilehandle, tree, taxonomic_rank, num_discr
         outfilehandle.write("     %  #         TAXID       TAXNAME\n")
         for i in xrange(0,N):
             n = nodes_to_print[i]
+            taxid_species[n.name] = n.taxname
             outfilehandle.write("{:>6.2f}  {:<8}  {:<10}  {:<30}\n".format(100.0*n.discriminative_fragments/float(num_discriminative_fragments), n.discriminative_fragments, n.name, n.taxname))
     else:
         outfilehandle.write("Nothing filtered through at {} level.".format(taxonomic_rank))
+    return taxid_species
 
 
 def write_results(filename, tree, discriminative_hits, num_discriminative_fragments, gene_info, annotation, options):
@@ -551,15 +554,16 @@ def write_results(filename, tree, discriminative_hits, num_discriminative_fragme
     with open(outfilename, "w") as outfile:
         outfile.write("Results at rank '{}' for file {}\n".format(options.taxonomic_rank, filename))
         outfile.write("-"*70+"\n")
-        write_top_n_at_taxonomic_rank(outfile, tree, options.taxonomic_rank, num_discriminative_fragments, n=options.display, walk=options.walk)
+        taxid_species = write_top_n_at_taxonomic_rank(outfile, tree, options.taxonomic_rank, num_discriminative_fragments, n=options.display, walk=options.walk)
         outfile.write(" Total: {:<}\n".format(num_discriminative_fragments))
-        outfile.write("-"*70+"\n")
 
-        outfile.write("Discriminative fragment            Taxid assignment")
+        outfile.write("-"*70+"\n")
+        fstr = "{:<30} {:>6}\n"
+        outfile.write(fstr.format("Discriminative fragment", "Assignment"))
         for fragment_id, hitlist_taxid_tuple in discriminative_hits.iteritems():
-            outfile.write("{:<30} {:>6}\n".format(fragment_id, hitlist_taxid_tuple[1]))
-        outfile.write("-"*70+"\n")
+            outfile.write(fstr.format(fragment_id, taxid_species[hitlist_taxid_tuple[1]]))
 
+        outfile.write("-"*70+"\n")
         gene_counts = count_annotation_hits(discriminative_hits, annotation, tree)
         outfile.write("Annotated regions hit by discriminative fragments:\n")
         write_gene_counts(outfile, gene_counts, gene_info, options.maxprint)
