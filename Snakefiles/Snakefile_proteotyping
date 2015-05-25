@@ -58,7 +58,11 @@ rule test_EU227:
 # Run X!!tandem
 rule xtandem:
     input: "1.mzXML/{sample}.mzXML.gz"
-    output: "2.xml/{sample}.xml"
+    output: 
+        "2.xml/{sample}.xml",
+        temp("./{sample}.mzXML"),
+        temp("./input_{sample}.xml"),
+        "./input_{sample}.xml.log"
     threads: 16
     params: 
         runtime="24:00:00",
