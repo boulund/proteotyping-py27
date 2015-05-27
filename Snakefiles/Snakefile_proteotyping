@@ -59,10 +59,10 @@ rule test_EU227:
 rule xtandem:
     input: "1.mzXML/{sample}.mzXML.gz"
     output: 
-        "2.xml/{sample}.xml",
         temp("./{sample}.mzXML"),
         temp("./input_{sample}.xml"),
-        "./input_{sample}.xml.log"
+        "./input_{sample}.xml.log",
+        results="2.xml/{sample}.xml"
     threads: 16
     params: 
         runtime="24:00:00",
@@ -74,8 +74,8 @@ rule xtandem:
     # it simplifies _a lot_ for downstream rules.
     shell: 
         """
-        run_xtandem.py --output {output} -n {threads} --db {XTANDEM_DB} --loglevel {LOGLEVEL} {input}
-        mv {output}* 2.xml/{wildcards.sample}.xml
+        run_xtandem.py --output {output.results} -n {threads} --db {XTANDEM_DB} --loglevel {LOGLEVEL} {input}
+        mv {output.results}* 2.xml/{wildcards.sample}.xml
         """
 
 # X!!tandem output report generation
