@@ -561,8 +561,11 @@ def write_results(filename, tree, discriminative_hits, num_discriminative_fragme
         fstr = "{:<30} {:>6}\n"
         outfile.write(fstr.format("Discriminative fragment", "Assignment"))
         for fragment_id, hitlist_taxid_tuple in discriminative_hits.iteritems():
-            outfile.write(fstr.format(fragment_id, taxid_species[hitlist_taxid_tuple[1]]))
-
+            try:
+                outfile.write(fstr.format(fragment_id, taxid_species[hitlist_taxid_tuple[1]]))
+            except KeyError:
+                outfile.write(fstr.format(fragment_id, hitlist_taxid_tuple[1]))
+                
         outfile.write("-"*70+"\n")
         gene_counts = count_annotation_hits(discriminative_hits, annotation, tree)
         outfile.write("Annotated regions hit by discriminative fragments:\n")
