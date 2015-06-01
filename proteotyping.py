@@ -160,7 +160,7 @@ def parse_blat_output(filename, options):
         logging.info("Ignoring hits to {}".format(blacklisted_accnos))
     if options.blacklist_accnos:
         blacklisted_accnos = blacklisted_accnos.union(parse_accno_blacklist(options.blacklist_accnos))
-        logging.info("Blacklisting ACCNOs in {}".format(options.blacklist_accnos))
+        logging.info("Blacklisting {} ACCNOs in {}".format(len(blacklisted_accnos), options.blacklist_accnos))
         logging.debug("Blacklisted ACCNOs: {}".format(blacklisted_accnos))
 
     with open(filename) as blast8:
