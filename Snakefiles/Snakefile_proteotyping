@@ -132,7 +132,7 @@ rule proteotyping:
         logfile="5.results/{sample}.results.log"
     threads: 16
     params: 
-        runtime="03:00:00",
+        runtime="04:00:00",
         memsize="HUGEMEM",
         jobname="proteotyping"
     shell: "proteotyping.py {input} --gene_info {GENE_INFO} --accno_annotation_pickle {ANNOTATIONS} --taxtree_pickle {TAXTREE} --blacklist_accnos {BLACKLIST} --maxprint {MAXPRINT} --logfile {output.logfile} --loglevel {LOGLEVEL} --output {output.results} --numCPUs {threads}"
