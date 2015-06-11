@@ -67,7 +67,7 @@ rule xtandem:
     params: 
         runtime="24:00:00",
         memsize="SMALLMEM",
-        jobname="{sample}-XT"
+        jobname="XT-{sample}"
     # Since X!!tandem annoyingly appends the run date and time to 
     # the filename, the file is renamed when X!!tandem finishes 
     # to remove the additional run date and time information because
@@ -86,7 +86,7 @@ rule xtandem_report:
     params:
         runtime="00:10:00",
         memsize="SMALLMEM",
-        jobname="{sample}-XTreport"
+        jobname="XTr-{sample}"
     shell: "create_tandem_search_report.py -o 2.xml/tandem_reports/ --loglevel {LOGLEVEL} {input}"
 
 
@@ -97,7 +97,7 @@ rule xtandem_unique:
     params:
         runtime="01:00:00",
         memsize="BIGMEM",
-        jobname="{sample}-unique"
+        jobname="uniq-{sample}"
     shell: "create_unique_protein_lists.py -M {GI_UNIPROT} -o 2.xml/unique_protein_lists/ --loglevel {LOGLEVEL} {input}"
 
 
@@ -109,7 +109,7 @@ rule xml2fasta:
     params: 
         runtime="00:10:00",
         memsize="SMALLMEM",
-        jobname="{sample}-xml2fasta"
+        jobname="x2f-{sample}"
     shell: "convert_tandem_xml_2_fasta.py -O {output} {input}"
 
 
@@ -120,7 +120,7 @@ rule blat:
     params: 
         runtime="03:00:00",
         memsize="SMALLMEM",
-        jobname="{sample}-BLAT"
+        jobname="BLAT-{sample}"
     shell: "blat {BLAT_DB} {input} -out=blast8 -t=dnax -q=prot -tileSize=5 -stepSize=5 -minScore=10 -minIdentity=85 {output}" 
 
 
@@ -132,9 +132,9 @@ rule proteotyping:
         logfile="5.results/{sample}.results.log"
     threads: 16
     params: 
-        runtime="05:00:00",
+        runtime="10:00:00",
         memsize="HUGEMEM",
-        jobname="{sample}-PT"
+        jobname="PT-{sample}"
     shell: "proteotyping.py {input} --gene_info {GENE_INFO} --accno_annotation_pickle {ANNOTATIONS} --taxtree_pickle {TAXTREE} --blacklist_accnos {BLACKLIST} --maxprint {MAXPRINT} --logfile {output.logfile} --loglevel {LOGLEVEL} --output {output.results} --numCPUs {threads}"
 
 
